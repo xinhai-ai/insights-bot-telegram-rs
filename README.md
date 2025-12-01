@@ -51,6 +51,9 @@ Telegram-only rewrite of the recap bot inspired by the original Go implementatio
 ### Auto recap
 - Background worker (60s tick) finds chats due for auto recap, generates recap, sends to the group and best-effort to subscribers, then updates `last_recap_at`.
 
+### Subscriptions
+- `/subscribe_recap` (in group): user subscribes to that group’s recap; `/unsubscribe_recap` cancels. Auto recap will DM subscribers the recap as well.
+
 ## Status
 - Bot/handlers/services/db scaffolding is in place.
 - Recap generation currently placeholder; wire OpenAI prompts next.

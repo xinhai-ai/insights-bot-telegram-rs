@@ -13,17 +13,21 @@ impl SubscribeHandlers {
         msg: Message,
         ctx: Arc<AppContext>,
     ) -> ResponseResult<()> {
+        if msg.chat.is_private() {
+            bot.send_message(msg.chat.id, "請在群組內使用此指令訂閱該群的 recap。").await?;
+            return Ok(());
+        }
+
         let svc = RecapService::new(&ctx.db, &ctx.openai);
         let user_id = msg.from().map(|u| u.id.0);
         if let Some(uid) = user_id {
             match svc.subscribe(msg.chat.id.0, uid as i64).await {
                 Ok(_) => {
-                    let text = ctx.i18n.t(ctx.config.locale, "recap.subscribe.ok", &[]);
-                    bot.send_message(msg.chat.id, text).await?;
+                    bot.send_message(msg.chat.id, "已訂閱本群組 recap。").await?;
                 }
                 Err(err) => {
                     error!("subscribe recap failed: {err:?}");
-                    bot.send_message(msg.chat.id, "Subscribe failed.").await?;
+                    bot.send_message(msg.chat.id, "訂閱失敗，稍後再試。").await?;
                 }
             }
         } else {
@@ -37,15 +41,19 @@ impl SubscribeHandlers {
         msg: Message,
         ctx: Arc<AppContext>,
     ) -> ResponseResult<()> {
+        if msg.chat.is_private() {
+            bot.send_message(msg.chat.id, "請在群組內使用此指令取消該群的 recap 訂閱。").await?;
+            return Ok(());
+        }
+
         let svc = RecapService::new(&ctx.db, &ctx.openai);
         let user_id = msg.from().map(|u| u.id.0);
         if let Some(uid) = user_id {
             if let Err(err) = svc.unsubscribe(msg.chat.id.0, uid as i64).await {
                 error!("unsubscribe recap failed: {err:?}");
-                bot.send_message(msg.chat.id, "Unsubscribe failed.").await?;
+                bot.send_message(msg.chat.id, "取消訂閱失敗，稍後再試。").await?;
             } else {
-                let text = ctx.i18n.t(ctx.config.locale, "recap.unsubscribe.ok", &[]);
-                bot.send_message(msg.chat.id, text).await?;
+                bot.send_message(msg.chat.id, "已取消訂閱本群組 recap。").await?;
             }
         }
         Ok(())
