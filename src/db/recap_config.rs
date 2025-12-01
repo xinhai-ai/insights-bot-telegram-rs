@@ -38,6 +38,24 @@ pub async fn get_recap_config(pool: &AnyPool, chat_id: i64) -> Result<Option<Rec
     Ok(rec)
 }
 
+pub async fn get_or_create_recap_config(pool: &AnyPool, chat_id: i64) -> Result<RecapConfig> {
+    if let Some(cfg) = get_recap_config(pool, chat_id).await? {
+        return Ok(cfg);
+    }
+    let default = RecapConfig {
+        chat_id,
+        enabled: true,
+        mode: None,
+        auto_recap_enabled: false,
+        auto_recap_rates_per_day: Some(1),
+        last_recap_at: None,
+        pinned_message_id: None,
+        updated_at: None,
+    };
+    upsert_recap_config(pool, &default).await?;
+    Ok(default)
+}
+
 pub async fn list_due_for_auto_recap(pool: &AnyPool, now: i64) -> Result<Vec<RecapConfig>> {
     let rows = sqlx::query_as::<_, RecapConfig>(
         "SELECT * FROM recap_configs
@@ -82,4 +100,42 @@ pub async fn list_subscribers(pool: &AnyPool, chat_id: i64) -> Result<Vec<RecapS
     .fetch_all(pool)
     .await?;
     Ok(rows)
+}
+
+pub async fn set_enabled(pool: &AnyPool, chat_id: i64, enabled: bool) -> Result<()> {
+    sqlx::query("UPDATE recap_configs SET enabled = $1, updated_at = $2 WHERE chat_id = $3")
+        .bind(enabled)
+        .bind(now_ts())
+        .bind(chat_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn set_auto_recap(pool: &AnyPool, chat_id: i64, enabled: bool) -> Result<()> {
+    sqlx::query(
+        "UPDATE recap_configs SET auto_recap_enabled = $1, updated_at = $2 WHERE chat_id = $3",
+    )
+    .bind(enabled)
+    .bind(now_ts())
+    .bind(chat_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+pub async fn set_rates_per_day(pool: &AnyPool, chat_id: i64, rates: i32) -> Result<()> {
+    sqlx::query(
+        "UPDATE recap_configs SET auto_recap_rates_per_day = $1, updated_at = $2 WHERE chat_id = $3",
+    )
+    .bind(rates)
+    .bind(now_ts())
+    .bind(chat_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+fn now_ts() -> i64 {
+    chrono::Utc::now().timestamp()
 }

@@ -45,6 +45,12 @@ Telegram-only rewrite of the recap bot inspired by the original Go implementatio
 ### Message recording
 - Middleware records incoming text/caption messages into `chat_histories`; forwarded texts in private chats are also stored in `forwarded_histories` for `/recap_forwarded`.
 
+### Recap configuration
+- `/configure_recap` shows inline buttons to toggle recap on/off, auto recap on/off, and select per-day frequency; settings are stored in `recap_configs`.
+
+### Auto recap
+- Background worker (60s tick) finds chats due for auto recap, generates recap, sends to the group and best-effort to subscribers, then updates `last_recap_at`.
+
 ## Status
 - Bot/handlers/services/db scaffolding is in place.
 - Recap generation currently placeholder; wire OpenAI prompts next.
