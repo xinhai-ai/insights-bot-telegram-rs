@@ -42,6 +42,9 @@ Telegram-only rewrite of the recap bot inspired by the original Go implementatio
 - Postgres: `DATABASE_URL=postgres://... sqlx migrate run`
 - SQLite: `DATABASE_URL=sqlite://data/dev.db sqlx migrate run`
 
+### Message recording
+- Middleware records incoming text/caption messages into `chat_histories`; forwarded texts in private chats are also stored in `forwarded_histories` for `/recap_forwarded`.
+
 ## Status
 - Bot/handlers/services/db scaffolding is in place.
 - Recap generation currently placeholder; wire OpenAI prompts next.

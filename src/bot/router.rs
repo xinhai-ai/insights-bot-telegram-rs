@@ -10,6 +10,7 @@ use crate::bot::{
         recap::RecapHandlers, recap_forwarded::RecapForwardedHandlers,
         subscribe::SubscribeHandlers, system::SystemHandlers,
     },
+    middleware,
 };
 
 pub fn build_dispatcher(
@@ -41,7 +42,8 @@ pub fn build_dispatcher(
                 .endpoint(SubscribeHandlers::handle_unsubscribe),
         );
 
-    let message_handler = Update::filter_message().branch(commands);
+    let message_handler =
+        Update::filter_message().branch(middleware::record_message().branch(commands));
 
     let callback_handler =
         Update::filter_callback_query().endpoint(RecapHandlers::handle_callback_query);
