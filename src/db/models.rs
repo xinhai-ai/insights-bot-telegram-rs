@@ -45,10 +45,21 @@ pub struct ChatHistory {
     pub message_id: i64,
     pub from_id: Option<i64>,
     pub from_username: Option<String>,
-    pub kind: Option<String>,
+    pub kind: String,
     pub text: Option<String>,
     pub media_url: Option<String>,
-    pub created_at: Option<i64>,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct ForwardedHistory {
+    pub id: i64,
+    pub user_id: i64,
+    pub from_chat_id: Option<i64>,
+    pub message_id: Option<i64>,
+    pub kind: String,
+    pub text: Option<String>,
+    pub created_at: i64,
 }
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]

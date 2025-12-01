@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::{
     db::{
         Database, chat_history, logs,
-        models::{RecapLog, RecapSubscription},
+        models::{ChatHistory, RecapLog, RecapSubscription},
         recap_config,
     },
     services::openai::{OpenAiClient, RecapResult},
@@ -46,8 +46,21 @@ impl<'a> RecapService<'a> {
     }
 
     pub async fn recap_forwarded(&self, user_id: i64, limit: i64) -> Result<RecapResult> {
-        let history =
-            chat_history::recent_forwarded_messages(&self.db.pool, user_id, limit).await?;
+        let forwarded = chat_history::list_forwarded(&self.db.pool, user_id, limit).await?;
+        let history: Vec<ChatHistory> = forwarded
+            .into_iter()
+            .map(|f| ChatHistory {
+                id: f.id,
+                chat_id: f.from_chat_id.unwrap_or(0),
+                message_id: f.message_id.unwrap_or(0),
+                from_id: Some(f.user_id),
+                from_username: None,
+                kind: f.kind,
+                text: f.text,
+                media_url: None,
+                created_at: f.created_at,
+            })
+            .collect();
         let text = self.openai.recap(&history).await?;
         Ok(RecapResult {
             text,

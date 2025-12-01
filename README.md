@@ -38,6 +38,10 @@ Telegram-only rewrite of the recap bot inspired by the original Go implementatio
 - Attempts Postgres first; on failure logs warning and connects to SQLite (`sqlite://{SQLITE_PATH}`).
 - Models prepared for chat histories, recap configs/subscriptions, recap logs.
 
+### Running migrations
+- Postgres: `DATABASE_URL=postgres://... sqlx migrate run`
+- SQLite: `DATABASE_URL=sqlite://data/dev.db sqlx migrate run`
+
 ## Status
 - Bot/handlers/services/db scaffolding is in place.
 - Recap generation currently placeholder; wire OpenAI prompts next.
