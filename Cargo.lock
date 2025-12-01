@@ -1357,6 +1357,7 @@ dependencies = [
  "serde_yaml",
  "sqlx",
  "teloxide",
+ "tempfile",
  "tokio",
  "tracing",
  "tracing-subscriber",
