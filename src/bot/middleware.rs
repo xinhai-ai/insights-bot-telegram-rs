@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use teloxide::{
+    RequestError,
     dispatching::UpdateHandler,
     dptree,
     types::{ChatKind, Message},
-    RequestError,
 };
 use tracing::warn;
 

@@ -8,15 +8,15 @@ pub struct SystemHandlers;
 
 impl SystemHandlers {
     pub async fn handle_start(bot: Bot, msg: Message, ctx: Arc<AppContext>) -> ResponseResult<()> {
-        let text = ctx.i18n.t(ctx.config.locale, "bot.start", &[]);
-        bot.send_message(msg.chat.id, text).await?;
+        let greeting = ctx.i18n.t(ctx.config.locale, "bot.start", &[]);
+        let help = format!("{}\n\n{}", greeting, command_list());
+        bot.send_message(msg.chat.id, help).await?;
         Ok(())
     }
 
     pub async fn handle_help(bot: Bot, msg: Message, ctx: Arc<AppContext>) -> ResponseResult<()> {
-        let mut help = String::from("Commands:\n");
-        help.push_str(&Command::descriptions().to_string());
-        let text = ctx.i18n.t(ctx.config.locale, "bot.help", &[]) + "\n\n" + &help;
+        let header = ctx.i18n.t(ctx.config.locale, "bot.help", &[]);
+        let text = format!("{header}\n\n{}", command_list());
         bot.send_message(msg.chat.id, text).await?;
         Ok(())
     }
@@ -26,4 +26,8 @@ impl SystemHandlers {
         bot.send_message(msg.chat.id, text).await?;
         Ok(())
     }
+}
+
+fn command_list() -> String {
+    format!("Commands:\n{}", Command::descriptions().to_string())
 }
