@@ -1,4 +1,4 @@
-use std::{num::NonZeroU32, sync::Arc};
+use std::{num::NonZeroU32, sync::Arc, time::Duration};
 
 use anyhow::Result;
 use governor::{
@@ -17,8 +17,10 @@ pub struct CommandRateLimiter {
 }
 
 impl CommandRateLimiter {
-    pub fn new(ops_per_sec: u32) -> Self {
-        let quota = Quota::per_second(NonZeroU32::new(ops_per_sec).unwrap_or(nonzero!(1u32)));
+    pub fn new(ops_per_window: u32, window: Duration) -> Self {
+        let quota = Quota::with_period(window)
+            .unwrap()
+            .allow_burst(NonZeroU32::new(ops_per_window).unwrap_or(nonzero!(1u32)));
         Self {
             limiter: Arc::new(RateLimiter::keyed(quota)),
         }

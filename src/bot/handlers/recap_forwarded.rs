@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use teloxide::prelude::*;
-use tracing::error;
+use tracing::warn;
 
 use crate::{bot::context::AppContext, services::recap::RecapService};
 
@@ -24,19 +24,32 @@ impl RecapForwardedHandlers {
         ctx: Arc<AppContext>,
     ) -> ResponseResult<()> {
         let svc = RecapService::new(&ctx.db, &ctx.openai);
-        match msg.from() {
-            Some(from) => match svc.recap_forwarded(from.id.0 as i64, 200).await {
-                Ok(res) => {
-                    bot.send_message(msg.chat.id, res.text).await?;
-                }
-                Err(err) => {
-                    error!("recap forwarded failed: {err:?}");
-                    bot.send_message(msg.chat.id, "Recap forwarded failed.")
-                        .await?;
-                }
-            },
-            None => {
-                bot.send_message(msg.chat.id, "无法识别用户。").await?;
+        let Some(from) = msg.from() else {
+            bot.send_message(msg.chat.id, "無法識別使用者。").await?;
+            return Ok(());
+        };
+
+        if let Err(err) = ctx.limiter.check(crate::services::rate_limit::RateKey(
+            msg.chat.id.0,
+            "recap_forwarded",
+        )) {
+            bot.send_message(msg.chat.id, "Too many requests, please try later.")
+                .await?;
+            warn!("rate limited recap_forwarded: {err:?}");
+            return Ok(());
+        }
+
+        match svc.recap_forwarded(from.id.0 as i64, 200).await {
+            Ok(res) => {
+                bot.send_message(msg.chat.id, res.text).await?;
+            }
+            Err(err) => {
+                warn!("recap forwarded failed: {err:?}");
+                bot.send_message(
+                    msg.chat.id,
+                    "目前沒有可用的轉發訊息，請先用 /recap_forwarded_start 並轉發訊息。",
+                )
+                .await?;
             }
         }
         Ok(())

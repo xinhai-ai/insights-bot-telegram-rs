@@ -54,6 +54,16 @@ Telegram-only rewrite of the recap bot inspired by the original Go implementatio
 ### Subscriptions
 - `/subscribe_recap` (in group): user subscribes to that group’s recap; `/unsubscribe_recap` cancels. Auto recap will DM subscribers the recap as well.
 
+### Forwarded recap flow
+- `/recap_forwarded_start`: in DM, tells user to forward messages; forwarded texts are stored.
+- `/recap_forwarded`: summarizes stored forwarded messages and clears them. If none, prompts user to forward first.
+
+### Known warnings
+- Unused helpers/fields (webhook config, add_feedback, media/whisper placeholders) remain until later phases implement those features.
+
+### Rate limiting
+- `/recap` and `/recap_forwarded` are limited per chat+command (default 1 request per 15s); exceeding the limit replies with a friendly notice.
+
 ## Status
 - Bot/handlers/services/db scaffolding is in place.
 - Recap generation currently placeholder; wire OpenAI prompts next.

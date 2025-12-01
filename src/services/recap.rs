@@ -47,6 +47,9 @@ impl<'a> RecapService<'a> {
 
     pub async fn recap_forwarded(&self, user_id: i64, limit: i64) -> Result<RecapResult> {
         let forwarded = chat_history::list_forwarded(&self.db.pool, user_id, limit).await?;
+        if forwarded.is_empty() {
+            anyhow::bail!("no forwarded messages");
+        }
         let history: Vec<ChatHistory> = forwarded
             .into_iter()
             .map(|f| ChatHistory {
@@ -62,6 +65,7 @@ impl<'a> RecapService<'a> {
             })
             .collect();
         let text = self.openai.recap(&history).await?;
+        chat_history::clear_forwarded(&self.db.pool, user_id).await?;
         Ok(RecapResult {
             text,
             model: self.openai.model.clone(),

@@ -19,7 +19,8 @@ async fn main() -> Result<()> {
     let database = db::Database::connect_from_env(&config.db).await?;
     let i18n = i18n::I18n::load_from_dir(&config.locales_dir)?;
     let openai = services::openai::OpenAiClient::new(&config.openai)?;
-    let limiter = services::rate_limit::CommandRateLimiter::new(1);
+    let limiter =
+        services::rate_limit::CommandRateLimiter::new(1, std::time::Duration::from_secs(15));
     let ctx = bot::context::AppContext::new(config, database.clone(), i18n, openai, limiter);
 
     info!(
