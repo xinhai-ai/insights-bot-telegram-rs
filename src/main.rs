@@ -6,22 +6,48 @@ mod i18n;
 mod services;
 mod telemetry;
 
-use anyhow::Result;
-use tracing::info;
+use std::fs;
+use std::path::Path;
+
+use anyhow::{Context, Result};
+use tracing::{info, warn};
 
 #[tokio::main]
-async fn main() -> Result<()> {
-    dotenvy::dotenv().ok();
+async fn main() {
+    if let Err(e) = run().await {
+        eprintln!("Error: {e:?}");
+        // On Windows, wait for user input before closing so they can see the error.
+        #[cfg(target_os = "windows")]
+        {
+            eprintln!("\nPress Enter to exit...");
+            let _ = std::io::stdin().read_line(&mut String::new());
+        }
+        std::process::exit(1);
+    }
+}
+
+async fn run() -> Result<()> {
+    load_env()?;
+
+    // Ensure required directories exist (locales are embedded at compile time).
+    ensure_directories(&["data", "logs"])?;
 
     let config = config::AppConfig::from_env()?;
-    telemetry::init_tracing(&config)?;
+    // Hold the guard to keep file logging active for the program's duration
+    let _log_guard = telemetry::init_tracing(&config)?;
 
     let database = db::Database::connect_from_env(&config.db).await?;
     let i18n = i18n::I18n::load_from_dir(&config.locales_dir)?;
     let openai = services::openai::OpenAiClient::new(&config.openai)?;
+    // Allow 3 recap requests per minute per chat/user
     let limiter =
-        services::rate_limit::CommandRateLimiter::new(1, std::time::Duration::from_secs(15));
-    let ctx = bot::context::AppContext::new(config, database.clone(), i18n, openai, limiter);
+        services::rate_limit::CommandRateLimiter::new(3, std::time::Duration::from_secs(60));
+    let telegraph = services::telegraph::TelegraphService::from_env();
+    if telegraph.is_some() {
+        info!("Telegraph service initialized");
+    }
+    let ctx =
+        bot::context::AppContext::new(config, database.clone(), i18n, openai, limiter, telegraph);
 
     info!(
         "bootstrap completed (backend: {:?}, locale: {})",
@@ -38,5 +64,78 @@ async fn main() -> Result<()> {
 
     // Start bot dispatcher.
     bot::run(ctx).await?;
+    Ok(())
+}
+
+/// Load environment variables, falling back to the executable directory when launched outside repo root.
+fn load_env() -> Result<()> {
+    // First try the current working directory.
+    if dotenvy::dotenv().is_ok() {
+        return Ok(());
+    }
+
+    // Fallback: directory containing the executable (double-click scenarios).
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(dir) = exe_path.parent() {
+            let env_path = dir.join(".env");
+            if env_path.exists() {
+                if let Err(e) = dotenvy::from_path(&env_path) {
+                    warn!(
+                        error = %e,
+                        path = %env_path.display(),
+                        "strict .env parsing failed; falling back to lenient parser"
+                    );
+                    load_env_lenient(&env_path)?;
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Lenient parser for .env files: allows unquoted values containing spaces.
+fn load_env_lenient(path: &Path) -> Result<()> {
+    let content = fs::read_to_string(path)
+        .with_context(|| format!("failed to read .env from {}", path.display()))?;
+
+    for (idx, line) in content.lines().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+
+        if let Some(eq) = trimmed.find('=') {
+            let (key, value) = trimmed.split_at(eq);
+            let key = key.trim();
+            let value = value[1..].trim(); // skip '='
+
+            if key.is_empty() {
+                warn!(line = idx + 1, "skipping .env line with empty key");
+                continue;
+            }
+
+            // Setting env vars is inherently process-global; mark explicit unsafe block
+            // to satisfy targets that treat `set_var` as unsafe.
+            unsafe {
+                std::env::set_var(key, value);
+            }
+        } else {
+            warn!(line = idx + 1, "skipping .env line without '='");
+        }
+    }
+
+    Ok(())
+}
+
+/// Ensure required directories exist, creating them if necessary.
+fn ensure_directories(dirs: &[&str]) -> Result<()> {
+    for dir in dirs {
+        let path = Path::new(dir);
+        if !path.exists() {
+            fs::create_dir_all(path)?;
+            info!("created directory: {}", dir);
+        }
+    }
     Ok(())
 }

@@ -1,0 +1,96 @@
+# 繁體中文語言包
+
+# 系統訊息
+system:
+  welcome: "歡迎使用 Insights Bot！我可以幫助你回顧和總結聊天記錄。"
+  help: |
+    可用指令：
+    /start - 顯示歡迎訊息
+    /help - 顯示幫助
+    /recap - 生成聊天回顧
+    /configure_recap - 配置回顧設定
+    /subscribe_recap - 訂閱群組回顧
+    /unsubscribe_recap - 取消訂閱群組回顧
+    /recap_forwarded_start - 開始轉發訊息收集
+    /recap_forwarded - 結束收集並生成回顧
+    /cancel - 取消當前操作
+  cancel: "操作已取消。"
+
+# 回顧相關訊息
+recap:
+  processing: "正在生成回顧..."
+  processing_hours: "⏳ 正在為過去 {hours} 小時的聊天記錄生成回顧，請稍等..."
+  failed: "回顧生成失敗，請稍後再試。"
+  fetch_failed: "獲取聊天記錄失敗，請稍後再試。"
+  no_messages: "沒有可用的訊息進行回顧。"
+  min_messages: "過去 {hours} 小時內只有 {count} 條文字訊息，至少需要 5 條才能生成回顧。"
+  rate_limited: "請求過於頻繁，請稍後再試。"
+  select_time_range: "📊 請選擇要回顧的時間範圍："
+  hours_label: "{hours} 小時"
+  hour_label: "1 小時"
+  page_title: "【群組 {group}】用戶 {user} 發起 {hours} 小時總結"
+  auto_page_title: "【群組 {chat}】自動回顧"
+  published: "📝 <b>聊天回顧已發布到 Telegraph</b>: <a href=\"{url}\">{title}</a>\n\n<b>濃縮總結：</b>\n{condensed}\n\n#recap\n🤖️ 濃縮總結由 {condensed_model} 生成\n🤖️ 分段總結由 {segmented_model} 生成"
+  no_telegraph: "📊 過去 {hours} 小時的聊天回顧（Telegraph 不可用）\n\n<b>濃縮總結：</b>\n{condensed}\n\n<b>分段總結：</b>\n{segmented}\n\n#recap\n🤖️ 濃縮總結由 {condensed_model} 生成\n🤖️ 分段總結由 {segmented_model} 生成"
+  auto_published: "📝 <b>聊天回顧已發布到 Telegraph</b>: <a href=\"{url}\">{title}</a>\n\n<b>濃縮總結：</b>\n{condensed}\n\n#recap #recap_auto\n<i>群組：{group}</i>\n🤖️ 濃縮總結由 {condensed_model} 生成\n🤖️ 分段總結由 {segmented_model} 生成"
+  auto_no_telegraph: "📊 自動聊天回顧（Telegraph 失敗）\n\n<b>濃縮：</b>\n{condensed}\n\n<b>分段：</b>\n{segmented}\n\n#recap #recap_auto\n<i>群組：{group}</i>\n🤖️ 濃縮總結由 {condensed_model} 生成\n🤖️ 分段總結由 {segmented_model} 生成"
+  forwarded:
+    start: "轉發訊息收集已開始。請將訊息轉發給我，然後使用 /recap_forwarded 生成總結。"
+    no_messages: "沒有可用的轉發訊息。請先使用 /recap_forwarded_start 並轉發一些訊息。"
+    unable_to_identify: "無法識別使用者。"
+
+# 配置訊息
+config:
+  group_only: "此指令僅在群組中可用。"
+  load_failed: "載入設定失敗，請稍後再試。"
+  updated: "設定已更新。"
+  title: "回顧設定"
+  enabled: "啟用"
+  auto_recap: "自動回顧"
+  times_per_day: "每天次數"
+  on: "開"
+  off: "關"
+  tap_to_adjust: "點擊按鈕進行調整。"
+
+# 訂閱訊息
+subscribe:
+  group_only: "請在群組中使用此指令來訂閱該群的回顧。"
+  success: "已訂閱本群組回顧。"
+  failed: "訂閱失敗，請稍後再試。"
+  unable_to_identify: "無法識別使用者。"
+
+# 取消訂閱訊息
+unsubscribe:
+  group_only: "請在群組中使用此指令來取消該群的回顧訂閱。"
+  success: "已取消訂閱本群組回顧。"
+  failed: "取消訂閱失敗，請稍後再試。"
+
+# Telegraph 相關
+telegraph:
+  note_split: "注意：由於內容較長，已自動分割為多個頁面。"
+  continuation: "這是分割內容的續頁。"
+  end_of_series: "系列頁面結束"
+  series_pages: "系列頁面"
+  part: "第 {n} 部分"
+  model_condensed: "🤖️ 濃縮總結由 {model} 生成"
+  model_segmented: "🤖️ 分段總結由 {model} 生成"
+
+# 結構化輸出標籤（用於 AI 輸出解析和生成）
+labels:
+  participants: "參與人"
+  discussion: "討論"
+  conclusion: "結論"
+  colon: "："
+  comma: "，"
+
+# OpenAI 相關
+openai:
+  summary_failed: "摘要生成失敗"
+  segmented_failed: "分段總結生成失敗"
+  no_topics: "沒有識別到討論話題。"
+
+# AI 提示詞（給大語言模型的指令）
+prompts:
+  sarcastic_system: "你是一位精煉的聊天記錄總結員。\n請將提供的聊天記錄，用繁體中文總結成一句話的核心內容，並在總結中恰當使用1-2個相關的emoji。\n總結應語言精煉、直擊要點。\n請直接給出總結，不要包含任何前言或解釋。"
+  sarcastic_user: "以下是一段聊天記錄，請給出你的總結：\n\n聊天記錄：\"\"\"\n{chat_history}\n\"\"\"\n\n請直接給出總結，不要加任何解釋。"
+  bullet_system: "你是一位精煉的聊天記錄總結員。請將提供的聊天記錄總結成要點，包含關鍵話題、決策和行動項目。\n\n要求：\n- 使用繁體中文回覆\n- 最多10個要點\n- 每個要點簡潔明瞭\n- 保留重要的用戶名和上下文\n- 每個要點末尾用方括號引用相關 msgId 編號，例如 [633577] 或 [633577][633579]；msgId 已在輸入中標記（格式 msgId:123: ...），可引用多個以覆蓋證據。"

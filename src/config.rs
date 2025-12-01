@@ -49,6 +49,7 @@ pub struct OpenAiConfig {
     pub api_base: Option<String>,
     pub model: String,
     pub token_limit: Option<u32>,
+    pub recap_token_limit: Option<u32>,
 }
 
 #[derive(Clone, Debug)]
@@ -58,6 +59,7 @@ pub struct AppConfig {
     pub db: DbConfig,
     pub openai: OpenAiConfig,
     pub log_level: String,
+    pub log_file_path: Option<String>,
     pub locales_dir: String,
 }
 
@@ -85,18 +87,30 @@ impl AppConfig {
             sqlite_file,
         };
 
+        let api_base = env::var("OPENAI_API_HOST").ok().map(|url| {
+            // Normalize URL: remove trailing slash and ensure /v1 suffix
+            let url = url.trim_end_matches('/');
+            if url.ends_with("/v1") {
+                url.to_string()
+            } else {
+                format!("{url}/v1")
+            }
+        });
+
         let openai = OpenAiConfig {
-            api_key: env::var("OPENAI_API_SECRET")
-                .or_else(|_| env::var("OPENAI_API_KEY"))
-                .context("OPENAI_API_SECRET (or OPENAI_API_KEY) is required")?,
-            api_base: env::var("OPENAI_API_HOST").ok(),
-            model: env::var("OPENAI_API_MODEL_NAME").unwrap_or_else(|_| "gpt-4o-mini".into()),
+            api_key: env::var("OPENAI_API_KEY").context("OPENAI_API_KEY is required")?,
+            api_base,
+            model: env::var("OPENAI_API_MODEL_NAME").unwrap_or_else(|_| "gpt-5".into()),
             token_limit: env::var("OPENAI_API_TOKEN_LIMIT")
+                .ok()
+                .and_then(|s| s.parse::<u32>().ok()),
+            recap_token_limit: env::var("OPENAI_API_CHAT_HISTORIES_RECAP_TOKEN_LIMIT")
                 .ok()
                 .and_then(|s| s.parse::<u32>().ok()),
         };
 
         let log_level = env::var("LOG_LEVEL").unwrap_or_else(|_| "info".into());
+        let log_file_path = env::var("LOG_FILE_PATH").ok();
         let locales_dir = env::var("LOCALES_DIR").unwrap_or_else(|_| "./locales".into());
 
         Ok(Self {
@@ -105,6 +119,7 @@ impl AppConfig {
             db,
             openai,
             log_level,
+            log_file_path,
             locales_dir,
         })
     }

@@ -24,12 +24,18 @@ sqlx = { version = "0.7", default-features = false, features = [
     "uuid",
     "json",
 ] }
-teloxide = { version = "0.12", features = ["macros", "ctrlc_handler", "rustls"] }
+teloxide = { version = "0.12", features = ["macros", "ctrlc_handler", "rustls", "webhooks-axum"] }
 tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "signal"] }
 tracing = "0.1"
+tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "registry"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 nonzero_ext = "0.3"
+reqwest = { version = "0.12.24", features = ["json"] }
+html-escape = "0.2"
+ammonia = "3"
+regex = "1"
+ego-tree = "0.6"
 
 [dev-dependencies]
 tempfile = "3"

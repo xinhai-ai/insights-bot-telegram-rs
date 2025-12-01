@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS chat_histories (
     chat_id BIGINT NOT NULL,
     message_id BIGINT NOT NULL,
     from_id BIGINT NULL,
+    from_full_name TEXT NULL,
     from_username TEXT NULL,
     kind TEXT NOT NULL,
     text TEXT NULL,
@@ -20,6 +21,9 @@ CREATE TABLE IF NOT EXISTS chat_histories (
     created_at BIGINT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_chat_histories_chat_created ON chat_histories (chat_id, created_at);
+
+-- Migration: Add from_full_name column if it doesn't exist (for existing databases)
+ALTER TABLE chat_histories ADD COLUMN IF NOT EXISTS from_full_name TEXT NULL;
 
 CREATE TABLE IF NOT EXISTS recap_configs (
     chat_id BIGINT PRIMARY KEY,

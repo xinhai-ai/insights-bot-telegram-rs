@@ -1,0 +1,96 @@
+# 简体中文语言包
+
+# 系统消息
+system:
+  welcome: "欢迎使用 Insights Bot！我可以帮助你回顾和总结聊天记录。"
+  help: |
+    可用命令：
+    /start - 显示欢迎消息
+    /help - 显示帮助
+    /recap - 生成聊天回顾
+    /configure_recap - 配置回顾设置
+    /subscribe_recap - 订阅群组回顾
+    /unsubscribe_recap - 取消订阅群组回顾
+    /recap_forwarded_start - 开始转发消息收集
+    /recap_forwarded - 结束收集并生成回顾
+    /cancel - 取消当前操作
+  cancel: "操作已取消。"
+
+# 回顾相关消息
+recap:
+  processing: "正在生成回顾..."
+  processing_hours: "⏳ 正在为过去 {hours} 小时的聊天记录生成回顾，请稍等..."
+  failed: "回顾生成失败，请稍后再试。"
+  fetch_failed: "获取聊天记录失败，请稍后再试。"
+  no_messages: "没有可用的消息进行回顾。"
+  min_messages: "过去 {hours} 小时内只有 {count} 条文字消息，至少需要 5 条才能生成回顾。"
+  rate_limited: "请求过于频繁，请稍后再试。"
+  select_time_range: "📊 请选择要回顾的时间范围："
+  hours_label: "{hours} 小时"
+  hour_label: "1 小时"
+  page_title: "【群组 {group}】用户 {user} 发起 {hours} 小时总结"
+  auto_page_title: "【群组 {chat}】自动回顾"
+  published: "📝 <b>聊天回顾已发布到 Telegraph</b>: <a href=\"{url}\">{title}</a>\n\n<b>浓缩总结：</b>\n{condensed}\n\n#recap\n🤖️ 浓缩总结由 {condensed_model} 生成\n🤖️ 分段总结由 {segmented_model} 生成"
+  no_telegraph: "📊 过去 {hours} 小时的聊天回顾（Telegraph 不可用）\n\n<b>浓缩总结：</b>\n{condensed}\n\n<b>分段总结：</b>\n{segmented}\n\n#recap\n🤖️ 浓缩总结由 {condensed_model} 生成\n🤖️ 分段总结由 {segmented_model} 生成"
+  auto_published: "📝 <b>聊天回顾已发布到 Telegraph</b>: <a href=\"{url}\">{title}</a>\n\n<b>浓缩总结：</b>\n{condensed}\n\n#recap #recap_auto\n<i>群组：{group}</i>\n🤖️ 浓缩总结由 {condensed_model} 生成\n🤖️ 分段总结由 {segmented_model} 生成"
+  auto_no_telegraph: "📊 自动聊天回顾（Telegraph 失败）\n\n<b>浓缩：</b>\n{condensed}\n\n<b>分段：</b>\n{segmented}\n\n#recap #recap_auto\n<i>群组：{group}</i>\n🤖️ 浓缩总结由 {condensed_model} 生成\n🤖️ 分段总结由 {segmented_model} 生成"
+  forwarded:
+    start: "转发消息收集已开始。请将消息转发给我，然后使用 /recap_forwarded 生成总结。"
+    no_messages: "没有可用的转发消息。请先使用 /recap_forwarded_start 并转发一些消息。"
+    unable_to_identify: "无法识别用户。"
+
+# 配置消息
+config:
+  group_only: "此命令仅在群组中可用。"
+  load_failed: "加载设置失败，请稍后再试。"
+  updated: "设置已更新。"
+  title: "回顾设置"
+  enabled: "启用"
+  auto_recap: "自动回顾"
+  times_per_day: "每天次数"
+  on: "开"
+  off: "关"
+  tap_to_adjust: "点击按钮进行调整。"
+
+# 订阅消息
+subscribe:
+  group_only: "请在群组中使用此命令来订阅该群的回顾。"
+  success: "已订阅本群组回顾。"
+  failed: "订阅失败，请稍后再试。"
+  unable_to_identify: "无法识别用户。"
+
+# 取消订阅消息
+unsubscribe:
+  group_only: "请在群组中使用此命令来取消该群的回顾订阅。"
+  success: "已取消订阅本群组回顾。"
+  failed: "取消订阅失败，请稍后再试。"
+
+# Telegraph 相关
+telegraph:
+  note_split: "注意：由于内容较长，已自动分割为多个页面。"
+  continuation: "这是分割内容的续页。"
+  end_of_series: "系列页面结束"
+  series_pages: "系列页面"
+  part: "第 {n} 部分"
+  model_condensed: "🤖️ 浓缩总结由 {model} 生成"
+  model_segmented: "🤖️ 分段总结由 {model} 生成"
+
+# 结构化输出标签（用于 AI 输出解析和生成）
+labels:
+  participants: "参与人"
+  discussion: "讨论"
+  conclusion: "结论"
+  colon: "："
+  comma: "，"
+
+# OpenAI 相关
+openai:
+  summary_failed: "摘要生成失败"
+  segmented_failed: "分段总结生成失败"
+  no_topics: "没有识别到讨论话题。"
+
+# AI 提示词（给大语言模型的指令）
+prompts:
+  sarcastic_system: "你是一位精炼的聊天记录总结员。\n请将提供的聊天记录，用简体中文总结成一句话的核心内容，并在总结中恰当使用1-2个相关的emoji。\n总结应语言精练、直击要点。\n请直接给出总结，不要包含任何前言或解释。"
+  sarcastic_user: "以下是一段聊天记录，请给出你的总结：\n\n聊天记录：\"\"\"\n{chat_history}\n\"\"\"\n\n请直接给出总结，不要加任何解释。"
+  bullet_system: "你是一位精炼的聊天记录总结员。请将提供的聊天记录总结成要点，包含关键话题、决策和行动项目。\n\n要求：\n- 使用简体中文回复\n- 最多10个要点\n- 每个要点简洁明了\n- 保留重要的用户名和上下文\n- 每个要点末尾用方括号引用相关 msgId 编号，例如 [633577] 或 [633577][633579]；msgId 已在输入中标记（格式 msgId:123: ...），可引用多个以覆盖证据。"

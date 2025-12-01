@@ -7,7 +7,7 @@ fn config_from_env_reads_required() {
     // set required vars (env mutation is unsafe in Rust 2024)
     unsafe {
         env::set_var("TELEGRAM_BOT_TOKEN", "token");
-        env::set_var("OPENAI_API_SECRET", "key");
+        env::set_var("OPENAI_API_KEY", "key");
         env::set_var("DATABASE_URL", "sqlite::memory:");
         env::remove_var("INSIGHTS_LANG");
     }

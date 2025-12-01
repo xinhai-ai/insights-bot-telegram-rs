@@ -1,0 +1,37 @@
+# Build artifacts
+target/
+*.exe
+*.pdb
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment files (should be injected at runtime)
+.env
+.env.*
+!.env.example
+
+# Git
+.git/
+.gitignore
+
+# Local data and logs
+data/
+logs/
+
+# Documentation
+*.md
+!README.md
+
+# Test files
+tests/
+*.test.*
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db

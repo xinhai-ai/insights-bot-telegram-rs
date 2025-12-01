@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use teloxide::{RequestError, dispatching::DefaultKey, dptree, prelude::*};
-use tracing::info;
 
 use crate::bot::{
     commands::Command,
@@ -42,8 +41,18 @@ pub fn build_dispatcher(
                 .endpoint(SubscribeHandlers::handle_unsubscribe),
         );
 
-    let message_handler =
-        Update::filter_message().branch(middleware::record_message().branch(commands));
+    // Message handler: record ALL messages first, then try commands
+    let message_handler = Update::filter_message()
+        // Use inspect to record message as side effect (doesn't affect control flow)
+        .inspect(|ctx: Arc<AppContext>, msg: Message| {
+            let ctx = ctx.clone();
+            let msg = msg.clone();
+            tokio::spawn(async move {
+                middleware::record_message(ctx, msg).await;
+            });
+        })
+        // Then try to match commands
+        .branch(commands);
 
     let callback_handler =
         Update::filter_callback_query().endpoint(RecapHandlers::handle_callback_query);
@@ -54,9 +63,6 @@ pub fn build_dispatcher(
 
     Dispatcher::builder(bot, handler)
         .dependencies(dptree::deps![ctx.clone()])
-        .default_handler(|upd| async move {
-            info!("unhandled update: {:?}", upd);
-        })
         .enable_ctrlc_handler()
         .build()
 }

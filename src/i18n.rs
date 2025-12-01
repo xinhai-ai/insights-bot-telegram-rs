@@ -2,8 +2,14 @@ use std::{collections::HashMap, fs, path::Path};
 
 use anyhow::Result;
 use serde_yaml::Value;
+use tracing::info;
 
 use crate::config::Locale;
+
+// Embed locale files at compile time for self-contained binary
+const EMBEDDED_EN: &str = include_str!("../locales/en.yml");
+const EMBEDDED_ZH_HANS: &str = include_str!("../locales/zh-Hans.yml");
+const EMBEDDED_ZH_HANT: &str = include_str!("../locales/zh-Hant.yml");
 
 #[derive(Clone)]
 pub struct I18n {
@@ -11,19 +17,79 @@ pub struct I18n {
 }
 
 impl I18n {
+    /// Load locale bundles from embedded files (compile-time).
+    /// Falls back to directory loading if specified.
     pub fn load_from_dir(dir: &str) -> Result<Self> {
+        let embedded = [
+            ("en", EMBEDDED_EN),
+            ("zh-Hans", EMBEDDED_ZH_HANS),
+            ("zh-Hant", EMBEDDED_ZH_HANT),
+        ];
+
+        // First try to load embedded locales (always available)
         let mut bundles = HashMap::new();
-        for code in ["en", "zh-Hans", "zh-Hant"] {
-            let path = Path::new(dir).join(format!("{code}.yml"));
-            if !path.exists() {
-                continue;
-            }
-            let raw = fs::read_to_string(&path)?;
-            let value: Value = serde_yaml::from_str(&raw)?;
+
+        for &(code, content) in &embedded {
+            let value: Value = serde_yaml::from_str(content)?;
             let mut flat = HashMap::new();
             flatten_yaml(None, &value, &mut flat);
             bundles.insert(code.to_string(), flat);
         }
+
+        info!("loaded {} embedded locale bundles", bundles.len());
+
+        let dir_path = Path::new(dir);
+
+        // Ensure locales directory exists and seed files if absent.
+        if !dir_path.exists() {
+            fs::create_dir_all(dir_path)?;
+            info!("created locales directory at {}", dir_path.display());
+        }
+        for &(code, content) in &embedded {
+            let path = dir_path.join(format!("{code}.yml"));
+            if !path.exists() {
+                fs::write(&path, content)?;
+                info!("seeded default locale file {}", path.display());
+            }
+        }
+
+        // Merge external files on top of embedded (external keys override embedded,
+        // but new embedded keys not present in external files are preserved).
+        for &(code, _) in &embedded {
+            let path = dir_path.join(format!("{code}.yml"));
+            if path.exists() {
+                if let Ok(raw) = fs::read_to_string(&path) {
+                    if let Ok(value) = serde_yaml::from_str::<Value>(&raw) {
+                        let mut external_flat = HashMap::new();
+                        flatten_yaml(None, &value, &mut external_flat);
+
+                        // Merge: external keys override embedded keys
+                        if let Some(base) = bundles.get_mut(code) {
+                            let external_count = external_flat.len();
+                            let base_count = base.len();
+                            for (k, v) in external_flat {
+                                base.insert(k, v);
+                            }
+                            let merged_count = base.len();
+                            let new_keys = merged_count.saturating_sub(external_count);
+                            if new_keys > 0 {
+                                info!(
+                                    "merged locale {code}: {} external keys + {} new embedded keys",
+                                    external_count, new_keys
+                                );
+                            } else {
+                                info!(
+                                    "merged locale {code} from {} ({} keys)",
+                                    path.display(),
+                                    base_count
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(Self { bundles })
     }
 

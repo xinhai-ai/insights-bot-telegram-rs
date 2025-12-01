@@ -3,26 +3,26 @@ use teloxide::utils::command::BotCommands;
 #[derive(BotCommands, Clone)]
 #[command(
     rename_rule = "snake_case",
-    description = "可用指令列表",
+    description = "Available commands",
     separator = " "
 )]
 pub enum Command {
-    #[command(description = "顯示啟動說明")]
+    #[command(description = "Show welcome message")]
     Start,
-    #[command(description = "顯示幫助")]
+    #[command(description = "Show help")]
     Help,
-    #[command(description = "取消當前操作")]
+    #[command(description = "Cancel current operation")]
     Cancel,
-    #[command(description = "生成聊天回顧")]
+    #[command(description = "Generate chat recap")]
     Recap,
-    #[command(description = "配置回顧行為")]
+    #[command(description = "Configure recap settings")]
     ConfigureRecap,
-    #[command(description = "訂閱群組回顧")]
+    #[command(description = "Subscribe to group recaps")]
     SubscribeRecap,
-    #[command(description = "取消訂閱群組回顧")]
+    #[command(description = "Unsubscribe from group recaps")]
     UnsubscribeRecap,
-    #[command(description = "開始轉發收集模式")]
+    #[command(description = "Start forwarded message collection")]
     RecapForwardedStart,
-    #[command(description = "結束轉發收集並回顧")]
+    #[command(description = "End collection and recap forwarded")]
     RecapForwarded,
 }

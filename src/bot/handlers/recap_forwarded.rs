@@ -25,7 +25,10 @@ impl RecapForwardedHandlers {
     ) -> ResponseResult<()> {
         let svc = RecapService::new(&ctx.db, &ctx.openai);
         let Some(from) = msg.from() else {
-            bot.send_message(msg.chat.id, "無法識別使用者。").await?;
+            let text = ctx
+                .i18n
+                .t(ctx.config.locale, "recap.forwarded.unable_to_identify", &[]);
+            bot.send_message(msg.chat.id, text).await?;
             return Ok(());
         };
 
@@ -33,23 +36,22 @@ impl RecapForwardedHandlers {
             msg.chat.id.0,
             "recap_forwarded",
         )) {
-            bot.send_message(msg.chat.id, "Too many requests, please try later.")
-                .await?;
+            let text = ctx.i18n.t(ctx.config.locale, "recap.rate_limited", &[]);
+            bot.send_message(msg.chat.id, text).await?;
             warn!("rate limited recap_forwarded: {err:?}");
             return Ok(());
         }
 
-        match svc.recap_forwarded(from.id.0 as i64, 200).await {
+        match svc.recap_forwarded(from.id.0 as i64, 200, &ctx.i18n).await {
             Ok(res) => {
                 bot.send_message(msg.chat.id, res.text).await?;
             }
             Err(err) => {
                 warn!("recap forwarded failed: {err:?}");
-                bot.send_message(
-                    msg.chat.id,
-                    "目前沒有可用的轉發訊息，請先用 /recap_forwarded_start 並轉發訊息。",
-                )
-                .await?;
+                let text = ctx
+                    .i18n
+                    .t(ctx.config.locale, "recap.forwarded.no_messages", &[]);
+                bot.send_message(msg.chat.id, text).await?;
             }
         }
         Ok(())

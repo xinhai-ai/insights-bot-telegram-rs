@@ -45,6 +45,13 @@ Telegram-only rewrite of the recap bot inspired by the original Go implementatio
 ### Message recording
 - Middleware records incoming text/caption messages into `chat_histories`; forwarded texts in private chats are also stored in `forwarded_histories` for `/recap_forwarded`.
 
+### Important: Group Permissions
+For the bot to receive and record all messages in a group (not just commands), you must do **ONE** of the following:
+1. **Disable Privacy Mode** (recommended): Contact [@BotFather](https://t.me/BotFather), send `/setprivacy`, select your bot, then choose `Disable`.
+2. **Make the bot a group admin**: Add the bot as an administrator in the group settings.
+
+Without this, the bot will only receive messages that directly mention it (e.g., `/recap@your_bot`) or are replies to the bot's messages.
+
 ### Recap configuration
 - `/configure_recap` shows inline buttons to toggle recap on/off, auto recap on/off, and select per-day frequency; settings are stored in `recap_configs`.
 
@@ -62,12 +69,14 @@ Telegram-only rewrite of the recap bot inspired by the original Go implementatio
 - Unused helpers/fields (webhook config, add_feedback, media/whisper placeholders) remain until later phases implement those features.
 
 ### Rate limiting
-- `/recap` and `/recap_forwarded` are limited per chat+command (default 1 request per 15s); exceeding the limit replies with a friendly notice.
+- `/recap` and `/recap_forwarded` are limited per chat+command (default 3 requests per 60s); exceeding the limit replies with a friendly notice.
 
 ## Status
-- Bot/handlers/services/db scaffolding is in place.
-- Recap generation currently placeholder; wire OpenAI prompts next.
-- SQLite/Postgres migrations need to be added.
+- Bot/handlers/services/db scaffolding is complete.
+- Recap generation fully functional with locale-aware prompts (en/zh-Hans/zh-Hant).
+- Auto-migrations run on startup (no separate migration step needed).
+- `/recap` now shows time selection buttons (1h, 2h, 4h, 6h, 12h, 24h) matching Go version.
+- Processing indicator shown during recap generation.
 
 ## License
 MIT. Based on MIT-licensed upstream `insights-bot`; this rewrite remains MIT-compatible.

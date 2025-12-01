@@ -14,8 +14,11 @@ impl SubscribeHandlers {
         ctx: Arc<AppContext>,
     ) -> ResponseResult<()> {
         if msg.chat.is_private() {
-            bot.send_message(msg.chat.id, "請在群組內使用此指令訂閱該群的 recap。")
-                .await?;
+            bot.send_message(
+                msg.chat.id,
+                "Please use this command in a group to subscribe to its recaps.",
+            )
+            .await?;
             return Ok(());
         }
 
@@ -24,17 +27,18 @@ impl SubscribeHandlers {
         if let Some(uid) = user_id {
             match svc.subscribe(msg.chat.id.0, uid as i64).await {
                 Ok(_) => {
-                    bot.send_message(msg.chat.id, "已訂閱本群組 recap。")
+                    bot.send_message(msg.chat.id, "Subscribed to this group's recaps.")
                         .await?;
                 }
                 Err(err) => {
                     error!("subscribe recap failed: {err:?}");
-                    bot.send_message(msg.chat.id, "訂閱失敗，稍後再試。")
+                    bot.send_message(msg.chat.id, "Subscription failed, please try later.")
                         .await?;
                 }
             }
         } else {
-            bot.send_message(msg.chat.id, "需要識別使用者。").await?;
+            bot.send_message(msg.chat.id, "Unable to identify user.")
+                .await?;
         }
         Ok(())
     }
@@ -45,8 +49,11 @@ impl SubscribeHandlers {
         ctx: Arc<AppContext>,
     ) -> ResponseResult<()> {
         if msg.chat.is_private() {
-            bot.send_message(msg.chat.id, "請在群組內使用此指令取消該群的 recap 訂閱。")
-                .await?;
+            bot.send_message(
+                msg.chat.id,
+                "Please use this command in a group to unsubscribe from its recaps.",
+            )
+            .await?;
             return Ok(());
         }
 
@@ -55,10 +62,10 @@ impl SubscribeHandlers {
         if let Some(uid) = user_id {
             if let Err(err) = svc.unsubscribe(msg.chat.id.0, uid as i64).await {
                 error!("unsubscribe recap failed: {err:?}");
-                bot.send_message(msg.chat.id, "取消訂閱失敗，稍後再試。")
+                bot.send_message(msg.chat.id, "Unsubscribe failed, please try later.")
                     .await?;
             } else {
-                bot.send_message(msg.chat.id, "已取消訂閱本群組 recap。")
+                bot.send_message(msg.chat.id, "Unsubscribed from this group's recaps.")
                     .await?;
             }
         }

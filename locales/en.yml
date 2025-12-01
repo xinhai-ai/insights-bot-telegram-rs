@@ -1,0 +1,96 @@
+# English locale for Insights Bot
+
+# System messages
+system:
+  welcome: "Welcome to Insights Bot! I can help you recap and summarize chat histories."
+  help: |
+    Available commands:
+    /start - Show welcome message
+    /help - Show this help
+    /recap - Generate chat recap
+    /configure_recap - Configure recap settings
+    /subscribe_recap - Subscribe to group recaps
+    /unsubscribe_recap - Unsubscribe from group recaps
+    /recap_forwarded_start - Start forwarded message collection
+    /recap_forwarded - End collection and recap forwarded
+    /cancel - Cancel current operation
+  cancel: "Operation cancelled."
+
+# Recap related messages
+recap:
+  processing: "Generating recap..."
+  processing_hours: "⏳ Generating recap for the past {hours} hours, please wait..."
+  failed: "Recap generation failed, please try later."
+  fetch_failed: "Failed to fetch chat history, please try later."
+  no_messages: "No messages available for recap."
+  min_messages: "Only {count} text messages in the past {hours} hours. At least 5 are required to generate a recap."
+  rate_limited: "Too many recap requests, please slow down."
+  select_time_range: "📊 Select time range to recap:"
+  hours_label: "{hours} hours"
+  hour_label: "1 hour"
+  page_title: "[Group {group}] User {user} requested {hours} hour recap"
+  auto_page_title: "[Chat {chat}] Auto recap"
+  published: "📝 <b>Chat recap published to Telegraph</b>: <a href=\"{url}\">{title}</a>\n\n<b>Condensed:</b>\n{condensed}\n\n#recap\n🤖️ Condensed by {condensed_model}\n🤖️ Segmented by {segmented_model}"
+  no_telegraph: "📊 Chat recap for past {hours} hours (Telegraph unavailable)\n\n<b>Condensed:</b>\n{condensed}\n\n<b>Segmented:</b>\n{segmented}\n\n#recap\n🤖️ Condensed by {condensed_model}\n🤖️ Segmented by {segmented_model}"
+  auto_published: "📝 <b>Chat recap published to Telegraph</b>: <a href=\"{url}\">{title}</a>\n\n<b>Condensed:</b>\n{condensed}\n\n#recap #recap_auto\n<i>Group: {group}</i>\n🤖️ Condensed by {condensed_model}\n🤖️ Segmented by {segmented_model}"
+  auto_no_telegraph: "📊 Auto chat recap (Telegraph failed)\n\n<b>Condensed:</b>\n{condensed}\n\n<b>Segmented:</b>\n{segmented}\n\n#recap #recap_auto\n<i>Group: {group}</i>\n🤖️ Condensed by {condensed_model}\n🤖️ Segmented by {segmented_model}"
+  forwarded:
+    start: "Forwarded message collection started. Forward messages to me, then use /recap_forwarded to generate a summary."
+    no_messages: "No forwarded messages available. Please use /recap_forwarded_start first and forward some messages."
+    unable_to_identify: "Unable to identify user."
+
+# Configuration messages
+config:
+  group_only: "This command is only available in groups."
+  load_failed: "Failed to load settings, please try later."
+  updated: "Settings updated."
+  title: "Recap Settings"
+  enabled: "Enabled"
+  auto_recap: "Auto recap"
+  times_per_day: "Times per day"
+  on: "On"
+  off: "Off"
+  tap_to_adjust: "Tap buttons to adjust."
+
+# Subscribe messages
+subscribe:
+  group_only: "Please use this command in a group to subscribe to its recaps."
+  success: "Subscribed to this group's recaps."
+  failed: "Subscription failed, please try later."
+  unable_to_identify: "Unable to identify user."
+
+# Unsubscribe messages
+unsubscribe:
+  group_only: "Please use this command in a group to unsubscribe from its recaps."
+  success: "Unsubscribed from this group's recaps."
+  failed: "Unsubscribe failed, please try later."
+
+# Telegraph related
+telegraph:
+  note_split: "Note: Due to content length, this has been split into multiple pages."
+  continuation: "This is a continuation page."
+  end_of_series: "End of series"
+  series_pages: "Series Pages"
+  part: "Part"
+  model_condensed: "🤖️ Condensed by {model}"
+  model_segmented: "🤖️ Segmented by {model}"
+
+# Labels for structured output (used in AI output parsing and generation)
+labels:
+  participants: "Participants"
+  discussion: "Discussion"
+  conclusion: "Conclusion"
+  colon: ": "
+  comma: ", "
+
+# OpenAI related
+openai:
+  summary_failed: "Summary generation failed"
+  segmented_failed: "Segmented summary failed"
+  no_topics: "No discussion topics identified."
+
+# AI Prompts (for LLM instructions)
+prompts:
+  sarcastic_system: "You are a concise chat history summarizer.\nSummarize the provided chat history into a single-sentence core summary, using 1-2 relevant emojis.\nBe concise and get straight to the point.\nRespond directly with the summary, no preamble or explanation."
+  sarcastic_user: "Here is a chat history, please provide your summary:\n\nChat history:\"\"\"\n{chat_history}\n\"\"\"\n\nPlease provide the summary directly, no explanation."
+  bullet_system: "You are a concise Telegram chat recap assistant. Summarize the chat history into key points, including main topics, decisions, and action items.\n\nRequirements:\n- Respond in English\n- Maximum 10 bullet points\n- Keep each point concise\n- Preserve important usernames and context\n- Append citation brackets with msgId numbers at the end of each point, e.g., [633577] or [633577][633579]; msgId numbers are present in the input lines (format msgId:123: ...). Use multiple citations when needed."

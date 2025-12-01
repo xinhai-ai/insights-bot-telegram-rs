@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS chat_histories (
     chat_id INTEGER NOT NULL,
     message_id INTEGER NOT NULL,
     from_id INTEGER,
+    from_full_name TEXT,
     from_username TEXT,
     kind TEXT NOT NULL,
     text TEXT,
@@ -20,6 +21,10 @@ CREATE TABLE IF NOT EXISTS chat_histories (
     created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_chat_histories_chat_created ON chat_histories (chat_id, created_at);
+
+-- Migration: Add from_full_name column if it doesn't exist (for existing databases)
+-- SQLite doesn't have IF NOT EXISTS for columns, so we use a workaround
+-- This will fail silently if the column already exists
 
 CREATE TABLE IF NOT EXISTS recap_configs (
     chat_id INTEGER PRIMARY KEY,

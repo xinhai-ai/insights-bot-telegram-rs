@@ -44,10 +44,15 @@ pub struct ChatHistory {
     pub chat_id: i64,
     pub message_id: i64,
     pub from_id: Option<i64>,
-    pub from_username: Option<String>,
+    /// Empty string when NULL (due to SQLx Any driver limitation).
+    pub from_full_name: String,
+    /// Empty string when NULL (due to SQLx Any driver limitation).
+    pub from_username: String,
     pub kind: String,
-    pub text: Option<String>,
-    pub media_url: Option<String>,
+    /// Empty string when NULL (due to SQLx Any driver limitation).
+    pub text: String,
+    /// Empty string when NULL (due to SQLx Any driver limitation).
+    pub media_url: String,
     pub created_at: i64,
 }
 
