@@ -29,6 +29,7 @@ tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "signal"] }
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "registry"] }
+url = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
 nonzero_ext = "0.3"
 reqwest = { version = "0.12.24", features = ["json"] }

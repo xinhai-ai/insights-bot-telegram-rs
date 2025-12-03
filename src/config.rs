@@ -78,9 +78,17 @@ impl AppConfig {
         let postgres_url = env::var("DATABASE_URL")
             .ok()
             .or_else(|| env::var("DB_CONNECTION_STR").ok());
-        let sqlite_file = env::var("SQLITE_PATH")
-            .ok()
-            .or_else(|| Some("data/dev.db".into()));
+
+        // Only use SQLite as fallback if:
+        // 1. SQLITE_PATH is explicitly set, OR
+        // 2. No PostgreSQL URL is configured (use SQLite as default)
+        let sqlite_file = env::var("SQLITE_PATH").ok().or_else(|| {
+            if postgres_url.is_none() {
+                Some("data/dev.db".into())
+            } else {
+                None
+            }
+        });
 
         let db = DbConfig {
             postgres_url,
