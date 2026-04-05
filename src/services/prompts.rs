@@ -24,6 +24,37 @@ Chat histories:"""
 
 Note: Topics may be discussed in parallel, so consider relevant keywords across the chat histories. Be concise and focus on the key essence of each topic."#;
 
+// Check model prompts for format verification / repair (ported from Go prompts.go:99-128).
+
+pub const CHECK_SUMMARY_JSON_SYSTEM_PROMPT: &str = r#"You are a strict JSON repair validator.
+Your task is to output a valid JSON array only.
+The JSON MUST conform to this schema:
+[{"topicName":"string","sinceId":123,"participants":["string"],"discussion":[{"point":"string","keyIds":[123]}],"conclusion":"string"}]
+Rules:
+1) Output valid JSON only.
+2) Do not use markdown fences.
+3) Do not include any explanation text.
+4) Keep original meaning as much as possible.
+5) Ensure each item has non-empty topicName, participants, and discussion.
+6) Ensure each discussion item has non-empty point and keyIds.
+7) If sinceId/keyIds are missing or unknown, use sinceId=1 and keyIds=[1]."#;
+
+pub const CHECK_SUMMARY_JSON_USER_PROMPT: &str =
+    "Please repair the following JSON payload into a valid JSON array that follows the schema:\n\n{{raw_json}}";
+
+pub const CHECK_CONDENSED_OUTPUT_SYSTEM_PROMPT: &str = r#"You are a strict output rewriter for condensed summaries.
+Your task is to rewrite the provided text into one natural sentence only.
+Rules:
+1) Output exactly one single-line sentence.
+2) Do not use markdown code fences.
+3) Do not output JSON, arrays, objects, or key-value format.
+4) Do not add explanations or prefixes.
+5) Keep the original meaning as much as possible.
+6) Preserve emoji when appropriate."#;
+
+pub const CHECK_CONDENSED_OUTPUT_USER_PROMPT: &str =
+    "Please rewrite the following invalid condensed summary into one natural sentence:\n\n{{raw_output}}";
+
 /// Configurable prompts that can be overridden via environment variables.
 #[derive(Debug, Clone)]
 pub struct PromptConfig {

@@ -12,6 +12,7 @@ use crate::{
     db::chat_history,
     i18n::I18n,
     services::{
+        openai::RecapTrace,
         rate_limit::RateKey,
         recap::RecapService,
         telegraph::{Node, NodeChild},
@@ -31,8 +32,7 @@ fn escape_html(text: &str) -> String {
 pub fn build_recap_nodes(
     _condensed: &str,
     segmented: &str,
-    condensed_model: &str,
-    segmented_model: &str,
+    trace: &RecapTrace,
     _chat_id: i64,
     locale: &Locale,
     i18n: &I18n,
@@ -187,37 +187,19 @@ pub fn build_recap_nodes(
         children: vec![],
     });
 
-    // Footer: two separate lines for model info
-    let condensed_footer = i18n.t(
-        *locale,
-        "telegraph.model_condensed",
-        &[("model", condensed_model)],
-    );
-    let segmented_footer = i18n.t(
-        *locale,
-        "telegraph.model_segmented",
-        &[("model", segmented_model)],
-    );
-
-    nodes.push(Node {
-        tag: "p".into(),
-        attrs: None,
-        children: vec![NodeChild::Node(Box::new(Node {
-            tag: "em".into(),
+    // Footer: three lines for model info (condensed, segmented, check)
+    let footer_text = trace.build_status_lines(locale, i18n);
+    for line in footer_text.lines() {
+        nodes.push(Node {
+            tag: "p".into(),
             attrs: None,
-            children: vec![NodeChild::Text(condensed_footer)],
-        }))],
-    });
-
-    nodes.push(Node {
-        tag: "p".into(),
-        attrs: None,
-        children: vec![NodeChild::Node(Box::new(Node {
-            tag: "em".into(),
-            attrs: None,
-            children: vec![NodeChild::Text(segmented_footer)],
-        }))],
-    });
+            children: vec![NodeChild::Node(Box::new(Node {
+                tag: "em".into(),
+                attrs: None,
+                children: vec![NodeChild::Text(line.to_string())],
+            }))],
+        });
+    }
 
     nodes
 }
@@ -500,8 +482,7 @@ impl RecapHandlers {
                 let nodes = build_recap_nodes(
                     &output.condensed_summary,
                     &output.segmented_summary,
-                    &output.condensed_model,
-                    &output.segmented_model,
+                    &output.trace,
                     chat_id,
                     &ctx.config.locale,
                     &ctx.i18n,
@@ -520,6 +501,11 @@ impl RecapHandlers {
                     None
                 };
 
+                // Build footer from execution trace.
+                let footer = output
+                    .trace
+                    .build_status_lines(&ctx.config.locale, &ctx.i18n);
+
                 // Format final message with condensed summary and Telegraph link.
                 let final_text = if let Some(url) = telegraph_url {
                     ctx.i18n.t(
@@ -529,8 +515,7 @@ impl RecapHandlers {
                             ("url", &url),
                             ("title", &escape_html(&page_title)),
                             ("condensed", &escape_html(&output.condensed_summary)),
-                            ("condensed_model", &output.condensed_model),
-                            ("segmented_model", &output.segmented_model),
+                            ("footer", &footer),
                         ],
                     )
                 } else {
@@ -544,8 +529,7 @@ impl RecapHandlers {
                             ("hours", &hours.to_string()),
                             ("condensed", &escape_html(&output.condensed_summary)),
                             ("segmented", &output.segmented_summary_html),
-                            ("condensed_model", &output.condensed_model),
-                            ("segmented_model", &output.segmented_model),
+                            ("footer", &footer),
                         ],
                     )
                 };

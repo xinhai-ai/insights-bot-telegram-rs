@@ -15,7 +15,9 @@ use crate::{
     i18n::I18n,
     services::prompts::{
         CHAT_HISTORY_SUMMARIZATION_SYSTEM_PROMPT, CHAT_HISTORY_SUMMARIZATION_USER_PROMPT,
-        PromptConfig, StructuredSummary, TopicSummary,
+        CHECK_CONDENSED_OUTPUT_SYSTEM_PROMPT, CHECK_CONDENSED_OUTPUT_USER_PROMPT,
+        CHECK_SUMMARY_JSON_SYSTEM_PROMPT, CHECK_SUMMARY_JSON_USER_PROMPT, PromptConfig,
+        StructuredSummary, TopicSummary,
     },
 };
 
@@ -24,6 +26,8 @@ pub struct OpenAiClient {
     client: Client<OpenAIConfig>,
     pub model: String,
     pub sarcastic_model: Option<String>,
+    pub check_model: Option<String>,
+    pub check_model_backup: Option<String>,
     token_limit: Option<u32>,
     pub prompt_config: PromptConfig,
 }
@@ -37,11 +41,19 @@ impl OpenAiClient {
         let client = Client::with_config(builder);
         let prompt_config = PromptConfig::from_env();
         let sarcastic_model = std::env::var("SARCASTIC_CONDENSED_MODEL_NAME").ok();
+        let check_model = std::env::var("CHECK_MODEL")
+            .ok()
+            .filter(|s| !s.is_empty());
+        let check_model_backup = std::env::var("CHECK_MODEL_backup")
+            .ok()
+            .filter(|s| !s.is_empty());
 
         Ok(Self {
             client,
             model: cfg.model.clone(),
             sarcastic_model,
+            check_model,
+            check_model_backup,
             token_limit: cfg.token_limit,
             prompt_config,
         })
@@ -89,11 +101,12 @@ impl OpenAiClient {
     }
 
     /// Structured JSON summarization with locale-aware output language.
+    /// Returns (parsed topics, raw JSON text) — raw text is kept for check model repair.
     pub async fn recap_structured_locale(
         &self,
         content: &str,
         locale: &Locale,
-    ) -> Result<StructuredSummary> {
+    ) -> Result<(StructuredSummary, String)> {
         let language = match locale {
             Locale::ZhHans => "Simplified Chinese",
             Locale::ZhHant => "Traditional Chinese",
@@ -137,13 +150,154 @@ impl OpenAiClient {
         // Try to extract JSON from response (may be wrapped in markdown code block)
         let json_text = extract_json_from_response(&raw_text);
 
-        // Try to parse JSON, fallback to empty array on failure.
+        // Try to parse JSON, return raw text alongside for potential check model repair.
         let summary: StructuredSummary = serde_json::from_str(&json_text).unwrap_or_else(|e| {
             tracing::warn!("Failed to parse structured summary JSON: {e}");
             Vec::new()
         });
 
-        Ok(summary)
+        Ok((summary, json_text))
+    }
+
+    /// Send a single chat completion request to the specified model for repair.
+    async fn call_check_model(
+        &self,
+        model_name: &str,
+        system_prompt: &str,
+        user_prompt: &str,
+    ) -> Result<String> {
+        let req = CreateChatCompletionRequestArgs::default()
+            .model(model_name)
+            .messages(vec![
+                ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
+                    content: system_prompt.into(),
+                    name: None,
+                }),
+                ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
+                    content: ChatCompletionRequestUserMessageContent::Text(user_prompt.to_string()),
+                    name: None,
+                }),
+            ])
+            .max_tokens(2000u32)
+            .build()?;
+
+        let resp = self
+            .client
+            .chat()
+            .create(req)
+            .await
+            .context("check model call failed")?;
+
+        resp.choices
+            .first()
+            .and_then(|c| c.message.content.clone())
+            .map(|t| t.trim().to_string())
+            .ok_or_else(|| anyhow::anyhow!("check model returned no content"))
+    }
+
+    /// Attempt to repair malformed segmented JSON using check model (+ backup).
+    async fn repair_segmented_json(
+        &self,
+        raw_json: &str,
+        trace: &mut CheckModelTrace,
+    ) -> Option<StructuredSummary> {
+        let check_model = self.check_model.as_ref()?;
+        trace.model = check_model.clone();
+        if let Some(backup) = &self.check_model_backup {
+            trace.backup_model = backup.clone();
+        }
+        trace.attempted = true;
+
+        let user_prompt = CHECK_SUMMARY_JSON_USER_PROMPT.replace("{{raw_json}}", raw_json);
+
+        // Try primary check model
+        if let Ok(repaired) = self
+            .call_check_model(check_model, CHECK_SUMMARY_JSON_SYSTEM_PROMPT, &user_prompt)
+            .await
+        {
+            let cleaned = extract_json_from_response(&repaired);
+            if let Ok(summary) = serde_json::from_str::<StructuredSummary>(&cleaned) {
+                tracing::info!("check model repaired segmented JSON (primary)");
+                trace.succeeded = true;
+                return Some(summary);
+            }
+        }
+
+        // Try backup if available
+        if let Some(backup) = &self.check_model_backup {
+            trace.backup_used = true;
+            if let Ok(repaired) = self
+                .call_check_model(backup, CHECK_SUMMARY_JSON_SYSTEM_PROMPT, &user_prompt)
+                .await
+            {
+                let cleaned = extract_json_from_response(&repaired);
+                if let Ok(summary) = serde_json::from_str::<StructuredSummary>(&cleaned) {
+                    tracing::info!("check model repaired segmented JSON (backup: {backup})");
+                    trace.succeeded = true;
+                    trace.backup_succeeded = true;
+                    return Some(summary);
+                }
+            }
+        }
+
+        tracing::warn!("check model failed to repair segmented JSON");
+        trace.failed = true;
+        None
+    }
+
+    /// Attempt to repair malformed condensed output using check model (+ backup).
+    async fn repair_condensed_output(
+        &self,
+        raw_output: &str,
+        trace: &mut CheckModelTrace,
+    ) -> Option<String> {
+        let check_model = self.check_model.as_ref()?;
+        trace.model = check_model.clone();
+        if let Some(backup) = &self.check_model_backup {
+            trace.backup_model = backup.clone();
+        }
+        trace.attempted = true;
+
+        let user_prompt =
+            CHECK_CONDENSED_OUTPUT_USER_PROMPT.replace("{{raw_output}}", raw_output);
+
+        // Try primary check model
+        if let Ok(repaired) = self
+            .call_check_model(
+                check_model,
+                CHECK_CONDENSED_OUTPUT_SYSTEM_PROMPT,
+                &user_prompt,
+            )
+            .await
+            && !needs_condensed_repair(&repaired)
+        {
+            tracing::info!("check model repaired condensed output (primary)");
+            trace.succeeded = true;
+            return Some(repaired);
+        }
+
+        // Try backup if available
+        if let Some(backup) = &self.check_model_backup {
+            trace.backup_used = true;
+            if let Ok(repaired) = self
+                .call_check_model(
+                    backup,
+                    CHECK_CONDENSED_OUTPUT_SYSTEM_PROMPT,
+                    &user_prompt,
+                )
+                .await
+                && !needs_condensed_repair(&repaired)
+            {
+                tracing::info!("check model repaired condensed output (backup: {backup})");
+                trace.succeeded = true;
+                trace.backup_succeeded = true;
+                return Some(repaired);
+            }
+        }
+
+        tracing::warn!("check model failed to repair condensed output");
+        trace.failed = true;
+        None
     }
 
     /// Generate both condensed and segmented summaries for chat history.
@@ -159,13 +313,30 @@ impl OpenAiClient {
             anyhow::bail!("no messages to summarize");
         }
 
+        let condensed_model_name = self
+            .sarcastic_model
+            .clone()
+            .unwrap_or_else(|| self.model.clone());
+
+        // Initialize trace
+        let mut trace = RecapTrace {
+            condensed_model: condensed_model_name,
+            segmented_model: self.model.clone(),
+            check: CheckModelTrace {
+                model: self.check_model.clone().unwrap_or_default(),
+                backup_model: self.check_model_backup.clone().unwrap_or_default(),
+                ..Default::default()
+            },
+        };
+
         // Generate both summaries concurrently
         let (condensed_result, segmented_result) = tokio::join!(
             self.sarcastic_condense(&formatted),
             self.recap_structured_locale(&formatted, locale)
         );
 
-        let condensed_summary = match condensed_result {
+        // Process condensed result, optionally repair with check model
+        let mut condensed_summary = match condensed_result {
             Ok(text) => {
                 if text.trim().is_empty() {
                     tracing::warn!("sarcastic_condense returned empty text");
@@ -180,12 +351,45 @@ impl OpenAiClient {
             }
         };
 
-        // Format structured topics to markdown (for Telegraph) and HTML (for Telegram inline)
+        // Check model repair for condensed output
+        if needs_condensed_repair(&condensed_summary) && self.check_model.is_some() {
+            tracing::info!("condensed output needs repair, invoking check model");
+            if let Some(repaired) = self
+                .repair_condensed_output(&condensed_summary, &mut trace.check)
+                .await
+            {
+                condensed_summary = repaired;
+            }
+        }
+
+        // Process segmented result, optionally repair with check model
         let (segmented_summary, segmented_summary_html) = match segmented_result {
-            Ok(topics) => (
-                format_topics_to_markdown(&topics, locale, chat_id, i18n),
-                format_topics_to_telegram_html(&topics, locale, chat_id, i18n),
-            ),
+            Ok((topics, raw_json)) => {
+                if topics.is_empty() && !raw_json.is_empty() && self.check_model.is_some() {
+                    // JSON parsing failed, try check model repair
+                    tracing::info!("segmented JSON parsing failed, invoking check model");
+                    if let Some(repaired_topics) = self
+                        .repair_segmented_json(&raw_json, &mut trace.check)
+                        .await
+                    {
+                        (
+                            format_topics_to_markdown(&repaired_topics, locale, chat_id, i18n),
+                            format_topics_to_telegram_html(&repaired_topics, locale, chat_id, i18n),
+                        )
+                    } else {
+                        let fallback = "No discussion topics identified.".to_string();
+                        (fallback.clone(), fallback)
+                    }
+                } else if topics.is_empty() {
+                    let fallback = "No discussion topics identified.".to_string();
+                    (fallback.clone(), fallback)
+                } else {
+                    (
+                        format_topics_to_markdown(&topics, locale, chat_id, i18n),
+                        format_topics_to_telegram_html(&topics, locale, chat_id, i18n),
+                    )
+                }
+            }
             Err(e) => {
                 tracing::warn!("recap_structured_locale failed: {e:?}");
                 let fallback = "Segmented summary generation failed".to_string();
@@ -193,19 +397,94 @@ impl OpenAiClient {
             }
         };
 
-        let condensed_model = self
-            .sarcastic_model
-            .clone()
-            .unwrap_or_else(|| self.model.clone());
-
         Ok(RecapOutput {
             condensed_summary,
             segmented_summary,
             segmented_summary_html,
-            condensed_model,
-            segmented_model: self.model.clone(),
+            trace,
             created_at: chrono::Utc::now().timestamp(),
         })
+    }
+}
+
+/// Check if condensed output is malformed and needs check model repair.
+/// Ported from Go `invalidCondensedOutputReason()`.
+fn needs_condensed_repair(text: &str) -> bool {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+    if trimmed.contains("```") {
+        return true;
+    }
+    // JSON-like detection
+    if serde_json::from_str::<serde_json::Value>(trimmed).is_ok() {
+        return true;
+    }
+    if (trimmed.starts_with('{') && trimmed.ends_with('}'))
+        || (trimmed.starts_with('[') && trimmed.ends_with(']'))
+    {
+        return true;
+    }
+    false
+}
+
+/// Tracks whether the check model was invoked and its outcome.
+#[derive(Debug, Clone, Default)]
+pub struct CheckModelTrace {
+    pub model: String,
+    pub backup_model: String,
+    pub attempted: bool,
+    pub succeeded: bool,
+    pub failed: bool,
+    pub backup_used: bool,
+    pub backup_succeeded: bool,
+}
+
+/// Full execution trace for a recap generation, paralleling Go's structure.
+#[derive(Debug, Clone, Default)]
+pub struct RecapTrace {
+    pub condensed_model: String,
+    pub segmented_model: String,
+    pub check: CheckModelTrace,
+}
+
+impl RecapTrace {
+    /// Build the three-line model status footer, joined by newline.
+    pub fn build_status_lines(&self, locale: &Locale, i18n: &I18n) -> String {
+        let condensed_line = i18n.t(*locale, "footer.condensed", &[("model", &self.condensed_model)]);
+        let segmented_line = i18n.t(*locale, "footer.segmented", &[("model", &self.segmented_model)]);
+        let check_line = self.format_check_line(locale, i18n);
+        format!("{}\n{}\n{}", condensed_line, segmented_line, check_line)
+    }
+
+    fn format_check_line(&self, locale: &Locale, i18n: &I18n) -> String {
+        let check = &self.check;
+        if check.model.is_empty() {
+            return i18n.t(*locale, "footer.check_not_configured", &[]);
+        }
+        if check.attempted && check.succeeded && check.backup_used {
+            return i18n.t(
+                *locale,
+                "footer.check_backup_success",
+                &[("model", &check.model), ("backup_model", &check.backup_model)],
+            );
+        }
+        if check.attempted && check.failed && check.backup_used {
+            return i18n.t(
+                *locale,
+                "footer.check_backup_failed",
+                &[("model", &check.model), ("backup_model", &check.backup_model)],
+            );
+        }
+        if check.attempted && check.failed {
+            return i18n.t(*locale, "footer.check_failed", &[("model", &check.model)]);
+        }
+        if check.attempted && check.succeeded {
+            return i18n.t(*locale, "footer.check_success", &[("model", &check.model)]);
+        }
+        // Not attempted = not triggered
+        i18n.t(*locale, "footer.check_not_triggered", &[("model", &check.model)])
     }
 }
 
@@ -218,10 +497,8 @@ pub struct RecapOutput {
     pub segmented_summary: String,
     /// Segmented summary in pure Telegram HTML (for inline messages).
     pub segmented_summary_html: String,
-    /// Model used for condensed summary.
-    pub condensed_model: String,
-    /// Model used for segmented summary.
-    pub segmented_model: String,
+    /// Execution trace with model names and check model status.
+    pub trace: RecapTrace,
     pub created_at: i64,
 }
 

@@ -28,10 +28,10 @@ recap:
   hour_label: "1 hour"
   page_title: "[Group {group}] User {user} requested {hours} hour recap"
   auto_page_title: "[Chat {chat}] Auto recap"
-  published: "📝 <b>Chat recap published to Telegraph</b>: <a href=\"{url}\">{title}</a>\n\n<b>Condensed:</b>\n{condensed}\n\n#recap\n🤖️ Condensed by {condensed_model}\n🤖️ Segmented by {segmented_model}"
-  no_telegraph: "📊 Chat recap for past {hours} hours (Telegraph unavailable)\n\n<b>Condensed:</b>\n{condensed}\n\n<b>Segmented:</b>\n{segmented}\n\n#recap\n🤖️ Condensed by {condensed_model}\n🤖️ Segmented by {segmented_model}"
-  auto_published: "📝 <b>Chat recap published to Telegraph</b>: <a href=\"{url}\">{title}</a>\n\n<b>Condensed:</b>\n{condensed}\n\n#recap #recap_auto\n<i>Group: {group}</i>\n🤖️ Condensed by {condensed_model}\n🤖️ Segmented by {segmented_model}"
-  auto_no_telegraph: "📊 Auto chat recap (Telegraph failed)\n\n<b>Condensed:</b>\n{condensed}\n\n<b>Segmented:</b>\n{segmented}\n\n#recap #recap_auto\n<i>Group: {group}</i>\n🤖️ Condensed by {condensed_model}\n🤖️ Segmented by {segmented_model}"
+  published: "📝 <b>Chat recap published to Telegraph</b>: <a href=\"{url}\">{title}</a>\n\n<b>Condensed:</b>\n{condensed}\n\n#recap\n{footer}"
+  no_telegraph: "📊 Chat recap for past {hours} hours (Telegraph unavailable)\n\n<b>Condensed:</b>\n{condensed}\n\n<b>Segmented:</b>\n{segmented}\n\n#recap\n{footer}"
+  auto_published: "📝 <b>Chat recap published to Telegraph</b>: <a href=\"{url}\">{title}</a>\n\n<b>Condensed:</b>\n{condensed}\n\n#recap #recap_auto\n<i>Group: {group}</i>\n{footer}"
+  auto_no_telegraph: "📊 Auto chat recap (Telegraph failed)\n\n<b>Condensed:</b>\n{condensed}\n\n<b>Segmented:</b>\n{segmented}\n\n#recap #recap_auto\n<i>Group: {group}</i>\n{footer}"
 
 # Configuration messages
 config:
@@ -61,6 +61,18 @@ telegraph:
   part: "Part"
   model_condensed: "🤖️ Condensed by {model}"
   model_segmented: "🤖️ Segmented by {model}"
+  model_check: "🤖️ Format check: {status}"
+
+# Model status footer lines
+footer:
+  condensed: "🤖️ Condensed by {model}"
+  segmented: "🤖️ Segmented by {model}"
+  check_not_configured: "🤖️ Check model not configured"
+  check_not_triggered: "🤖️ Format check by {model} not triggered"
+  check_success: "🤖️ Format checked by {model}"
+  check_failed: "🤖️ Format check by {model} failed"
+  check_backup_success: "🤖️ Format check by {model} failed (backup {backup_model} succeeded)"
+  check_backup_failed: "🤖️ Format check by {model} failed (backup {backup_model} failed)"
 
 # Labels for structured output (used in AI output parsing and generation)
 labels:

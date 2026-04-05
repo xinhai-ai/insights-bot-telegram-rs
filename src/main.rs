@@ -67,11 +67,23 @@ async fn run() -> Result<()> {
     Ok(())
 }
 
-/// Load environment variables, falling back to the executable directory when launched outside repo root.
+/// Load environment variables, falling back to lenient parsing for .env files
+/// that contain exotic values (long prompts with `"""`, `#`, backticks, etc.)
+/// which `dotenvy` cannot parse strictly.
 fn load_env() -> Result<()> {
-    // First try the current working directory.
-    if dotenvy::dotenv().is_ok() {
-        return Ok(());
+    // First try the current working directory with strict parser.
+    match dotenvy::dotenv() {
+        Ok(_) => return Ok(()),
+        Err(_) => {
+            // dotenvy sets env vars as it iterates, so some vars from early
+            // lines may already be set even though it returned Err.
+            // Re-parse with lenient parser to pick up ALL remaining vars.
+            let cwd_env = Path::new(".env");
+            if cwd_env.exists() {
+                load_env_lenient(cwd_env)?;
+                return Ok(());
+            }
+        }
     }
 
     // Fallback: directory containing the executable (double-click scenarios).
@@ -80,13 +92,8 @@ fn load_env() -> Result<()> {
     {
         let env_path = dir.join(".env");
         if env_path.exists()
-            && let Err(e) = dotenvy::from_path(&env_path)
+            && dotenvy::from_path(&env_path).is_err()
         {
-            warn!(
-                error = %e,
-                path = %env_path.display(),
-                "strict .env parsing failed; falling back to lenient parser"
-            );
             load_env_lenient(&env_path)?;
         }
     }

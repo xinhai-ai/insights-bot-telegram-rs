@@ -126,8 +126,7 @@ async fn run_once(ctx: Arc<AppContext>) -> anyhow::Result<()> {
                 let nodes = build_recap_nodes(
                     &output.condensed_summary,
                     &output.segmented_summary,
-                    &output.condensed_model,
-                    &output.segmented_model,
+                    &output.trace,
                     cfg.chat_id,
                     &ctx.config.locale,
                     &ctx.i18n,
@@ -151,6 +150,10 @@ async fn run_once(ctx: Arc<AppContext>) -> anyhow::Result<()> {
                         .replace('>', "&gt;")
                 }
 
+                let footer = output
+                    .trace
+                    .build_status_lines(&ctx.config.locale, &ctx.i18n);
+
                 let final_text = if let Some(url) = telegraph_url {
                     ctx.i18n.t(
                         ctx.config.locale,
@@ -160,8 +163,7 @@ async fn run_once(ctx: Arc<AppContext>) -> anyhow::Result<()> {
                             ("title", &esc(&page_title)),
                             ("condensed", &esc(&output.condensed_summary)),
                             ("group", &chat_title),
-                            ("condensed_model", &output.condensed_model),
-                            ("segmented_model", &output.segmented_model),
+                            ("footer", &footer),
                         ],
                     )
                 } else {
@@ -172,8 +174,7 @@ async fn run_once(ctx: Arc<AppContext>) -> anyhow::Result<()> {
                             ("condensed", &esc(&output.condensed_summary)),
                             ("segmented", &output.segmented_summary_html),
                             ("group", &chat_title),
-                            ("condensed_model", &output.condensed_model),
-                            ("segmented_model", &output.segmented_model),
+                            ("footer", &footer),
                         ],
                     )
                 };

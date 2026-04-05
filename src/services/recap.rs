@@ -42,7 +42,7 @@ impl<'a> RecapService<'a> {
                 chat_id: first.chat_id,
                 prompt: None,
                 recap_text: Some(output.segmented_summary.clone()),
-                model: Some(output.segmented_model.clone()),
+                model: Some(output.trace.segmented_model.clone()),
                 prompt_tokens: None,
                 completion_tokens: None,
                 created_at: Some(output.created_at),

@@ -28,10 +28,10 @@ recap:
   hour_label: "1 小時"
   page_title: "【群組 {group}】用戶 {user} 發起 {hours} 小時總結"
   auto_page_title: "【群組 {chat}】自動回顧"
-  published: "📝 <b>聊天回顧已發布到 Telegraph</b>: <a href=\"{url}\">{title}</a>\n\n<b>濃縮總結：</b>\n{condensed}\n\n#recap\n🤖️ 濃縮總結由 {condensed_model} 生成\n🤖️ 分段總結由 {segmented_model} 生成"
-  no_telegraph: "📊 過去 {hours} 小時的聊天回顧（Telegraph 不可用）\n\n<b>濃縮總結：</b>\n{condensed}\n\n<b>分段總結：</b>\n{segmented}\n\n#recap\n🤖️ 濃縮總結由 {condensed_model} 生成\n🤖️ 分段總結由 {segmented_model} 生成"
-  auto_published: "📝 <b>聊天回顧已發布到 Telegraph</b>: <a href=\"{url}\">{title}</a>\n\n<b>濃縮總結：</b>\n{condensed}\n\n#recap #recap_auto\n<i>群組：{group}</i>\n🤖️ 濃縮總結由 {condensed_model} 生成\n🤖️ 分段總結由 {segmented_model} 生成"
-  auto_no_telegraph: "📊 自動聊天回顧（Telegraph 失敗）\n\n<b>濃縮：</b>\n{condensed}\n\n<b>分段：</b>\n{segmented}\n\n#recap #recap_auto\n<i>群組：{group}</i>\n🤖️ 濃縮總結由 {condensed_model} 生成\n🤖️ 分段總結由 {segmented_model} 生成"
+  published: "📝 <b>聊天回顧已發布到 Telegraph</b>: <a href=\"{url}\">{title}</a>\n\n<b>濃縮總結：</b>\n{condensed}\n\n#recap\n{footer}"
+  no_telegraph: "📊 過去 {hours} 小時的聊天回顧（Telegraph 不可用）\n\n<b>濃縮總結：</b>\n{condensed}\n\n<b>分段總結：</b>\n{segmented}\n\n#recap\n{footer}"
+  auto_published: "📝 <b>聊天回顧已發布到 Telegraph</b>: <a href=\"{url}\">{title}</a>\n\n<b>濃縮總結：</b>\n{condensed}\n\n#recap #recap_auto\n<i>群組：{group}</i>\n{footer}"
+  auto_no_telegraph: "📊 自動聊天回顧（Telegraph 失敗）\n\n<b>濃縮：</b>\n{condensed}\n\n<b>分段：</b>\n{segmented}\n\n#recap #recap_auto\n<i>群組：{group}</i>\n{footer}"
 
 # 配置訊息
 config:
@@ -59,8 +59,20 @@ telegraph:
   end_of_series: "系列頁面結束"
   series_pages: "系列頁面"
   part: "第 {n} 部分"
-  model_condensed: "🤖️ 濃縮總結由 {model} 生成"
-  model_segmented: "🤖️ 分段總結由 {model} 生成"
+  model_condensed: "🤖️ 由 {model} 生成 濃縮總結"
+  model_segmented: "🤖️ 由 {model} 生成 分段總結"
+  model_check: "🤖️ 校驗格式：{status}"
+
+# 模型狀態頁腳
+footer:
+  condensed: "🤖️ 由 {model} 生成 濃縮總結"
+  segmented: "🤖️ 由 {model} 生成 分段總結"
+  check_not_configured: "🤖️ 未配置校驗模型"
+  check_not_triggered: "🤖️ 由 {model} 校驗格式未觸發"
+  check_success: "🤖️ 由 {model} 校驗格式"
+  check_failed: "🤖️ 由 {model} 校驗格式失敗"
+  check_backup_success: "🤖️ 由 {model} 校驗格式失敗（備用 {backup_model} 成功）"
+  check_backup_failed: "🤖️ 由 {model} 校驗格式失敗（備用 {backup_model} 失敗）"
 
 # 結構化輸出標籤（用於 AI 輸出解析和生成）
 labels:
