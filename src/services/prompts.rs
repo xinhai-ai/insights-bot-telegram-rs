@@ -98,6 +98,12 @@ impl PromptConfig {
         config
     }
 
+    /// Render the sarcastic system prompt with chat history substitution.
+    pub fn render_sarcastic_system_prompt(&self, chat_history: &str) -> String {
+        self.sarcastic_system_prompt
+            .replace("{{chat_history}}", chat_history)
+    }
+
     /// Render the sarcastic user prompt with chat history substitution.
     pub fn render_sarcastic_user_prompt(&self, chat_history: &str) -> String {
         self.sarcastic_user_prompt

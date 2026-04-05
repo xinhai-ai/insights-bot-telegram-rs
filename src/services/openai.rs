@@ -69,7 +69,7 @@ impl OpenAiClient {
             .model(&model)
             .messages(vec![
                 ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
-                    content: self.prompt_config.sarcastic_system_prompt.clone().into(),
+                    content: self.prompt_config.render_sarcastic_system_prompt(content).into(),
                     name: None,
                 }),
                 ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
