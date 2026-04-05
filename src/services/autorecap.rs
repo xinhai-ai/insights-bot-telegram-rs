@@ -170,7 +170,7 @@ async fn run_once(ctx: Arc<AppContext>) -> anyhow::Result<()> {
                         "recap.auto_no_telegraph",
                         &[
                             ("condensed", &esc(&output.condensed_summary)),
-                            ("segmented", &esc(&output.segmented_summary)),
+                            ("segmented", &output.segmented_summary_html),
                             ("group", &chat_title),
                             ("condensed_model", &output.condensed_model),
                             ("segmented_model", &output.segmented_model),

@@ -44,7 +44,8 @@ pub struct ChatHistory {
     pub id: i64,
     pub chat_id: i64,
     pub message_id: i64,
-    pub from_id: Option<i64>,
+    /// Zero when NULL (due to SQLx Any driver limitation).
+    pub from_id: i64,
     /// Empty string when NULL (due to SQLx Any driver limitation).
     pub from_full_name: String,
     /// Empty string when NULL (due to SQLx Any driver limitation).

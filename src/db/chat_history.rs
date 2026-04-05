@@ -38,7 +38,7 @@ pub async fn insert_message(
 pub async fn recent_messages(pool: &AnyPool, chat_id: i64, limit: i64) -> Result<Vec<ChatHistory>> {
     // Use explicit column selection with COALESCE to handle SQLx Any driver NULL issues.
     let rows = sqlx::query_as::<_, ChatHistory>(
-        "SELECT id, chat_id, message_id, from_id,
+        "SELECT id, chat_id, message_id, COALESCE(from_id, 0) as from_id,
                 COALESCE(from_full_name, '') as from_full_name,
                 COALESCE(from_username, '') as from_username,
                 kind,
@@ -75,7 +75,7 @@ pub async fn messages_since_hours(
 ) -> Result<Vec<ChatHistory>> {
     let since_timestamp = chrono::Utc::now().timestamp() - (hours * 3600);
     let rows = sqlx::query_as::<_, ChatHistory>(
-        "SELECT id, chat_id, message_id, from_id,
+        "SELECT id, chat_id, message_id, COALESCE(from_id, 0) as from_id,
                 COALESCE(from_full_name, '') as from_full_name,
                 COALESCE(from_username, '') as from_username,
                 kind,

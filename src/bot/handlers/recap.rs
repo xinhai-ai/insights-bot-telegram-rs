@@ -535,13 +535,15 @@ impl RecapHandlers {
                     )
                 } else {
                     // Fallback: send condensed summary + segmented summary directly.
+                    // Use segmented_summary_html (already Telegram-HTML-safe) instead of
+                    // escape_html on the markdown version, which would destroy <a> links.
                     ctx.i18n.t(
                         ctx.config.locale,
                         "recap.no_telegraph",
                         &[
                             ("hours", &hours.to_string()),
                             ("condensed", &escape_html(&output.condensed_summary)),
-                            ("segmented", &escape_html(&output.segmented_summary)),
+                            ("segmented", &output.segmented_summary_html),
                             ("condensed_model", &output.condensed_model),
                             ("segmented_model", &output.segmented_model),
                         ],

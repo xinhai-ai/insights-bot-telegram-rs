@@ -180,12 +180,16 @@ impl OpenAiClient {
             }
         };
 
-        // Format structured topics to markdown
-        let segmented_summary = match segmented_result {
-            Ok(topics) => format_topics_to_markdown(&topics, locale, chat_id, i18n),
+        // Format structured topics to markdown (for Telegraph) and HTML (for Telegram inline)
+        let (segmented_summary, segmented_summary_html) = match segmented_result {
+            Ok(topics) => (
+                format_topics_to_markdown(&topics, locale, chat_id, i18n),
+                format_topics_to_telegram_html(&topics, locale, chat_id, i18n),
+            ),
             Err(e) => {
                 tracing::warn!("recap_structured_locale failed: {e:?}");
-                "Segmented summary generation failed".to_string()
+                let fallback = "Segmented summary generation failed".to_string();
+                (fallback.clone(), fallback)
             }
         };
 
@@ -197,6 +201,7 @@ impl OpenAiClient {
         Ok(RecapOutput {
             condensed_summary,
             segmented_summary,
+            segmented_summary_html,
             condensed_model,
             segmented_model: self.model.clone(),
             created_at: chrono::Utc::now().timestamp(),
@@ -209,8 +214,10 @@ impl OpenAiClient {
 pub struct RecapOutput {
     /// Condensed single-sentence summary with emoji.
     pub condensed_summary: String,
-    /// Full segmented summary (for Telegraph).
+    /// Full segmented summary in Markdown+HTML (for Telegraph nodes).
     pub segmented_summary: String,
+    /// Segmented summary in pure Telegram HTML (for inline messages).
+    pub segmented_summary_html: String,
     /// Model used for condensed summary.
     pub condensed_model: String,
     /// Model used for segmented summary.
@@ -271,6 +278,102 @@ fn extract_json_from_response(text: &str) -> String {
 
     // Return as-is if not wrapped
     trimmed.to_string()
+}
+
+/// Escape HTML special characters for Telegram HTML parse mode.
+fn escape_html(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+/// Format structured topics into Telegram-compatible HTML (for inline messages).
+/// Uses `<b>` for headers, preserves `<a>` links, and escapes AI-generated text.
+pub fn format_topics_to_telegram_html(
+    topics: &[TopicSummary],
+    locale: &Locale,
+    chat_id: i64,
+    i18n: &I18n,
+) -> String {
+    if topics.is_empty() {
+        return "No discussion topics identified.".to_string();
+    }
+
+    let participants_label = i18n.t(*locale, "labels.participants", &[]);
+    let discussion_label = i18n.t(*locale, "labels.discussion", &[]);
+    let conclusion_label = i18n.t(*locale, "labels.conclusion", &[]);
+    let colon = i18n.t(*locale, "labels.colon", &[]);
+    let comma = i18n.t(*locale, "labels.comma", &[]);
+
+    let chat_cid = if chat_id < 0 {
+        (chat_id.abs() - 1_000_000_000_000).to_string()
+    } else {
+        chat_id.to_string()
+    };
+
+    let mut output = Vec::new();
+
+    for topic in topics {
+        // Topic title: <b> with optional <a> link
+        if topic.since_id > 0 {
+            output.push(format!(
+                "<b><a href=\"https://t.me/c/{}/{}\">{}</a></b>",
+                chat_cid, topic.since_id, escape_html(&topic.topic_name)
+            ));
+        } else {
+            output.push(format!("<b>{}</b>", escape_html(&topic.topic_name)));
+        }
+
+        // Participants
+        let participants_str = topic
+            .participants
+            .iter()
+            .map(|p| escape_html(p))
+            .collect::<Vec<_>>()
+            .join(&comma);
+        output.push(format!("{}{}{}", participants_label, colon, participants_str));
+
+        // Discussion
+        output.push(format!("{}{}", discussion_label, colon));
+
+        for point in &topic.discussion {
+            let links: Vec<String> = point
+                .key_ids
+                .iter()
+                .enumerate()
+                .map(|(i, id)| {
+                    format!(
+                        "<a href=\"https://t.me/c/{}/{}\">[{}]</a>",
+                        chat_cid, id, i + 1
+                    )
+                })
+                .collect();
+
+            let links_str = if links.is_empty() {
+                String::new()
+            } else {
+                format!(" {}", links.join(" "))
+            };
+
+            output.push(format!(" • {}{}", escape_html(&point.point), links_str));
+        }
+
+        // Conclusion (optional)
+        if let Some(conclusion) = &topic.conclusion
+            && !conclusion.is_empty()
+        {
+            output.push(format!(
+                "{}{}{}",
+                conclusion_label,
+                colon,
+                escape_html(conclusion)
+            ));
+        }
+
+        output.push(String::new());
+    }
+
+    output.join("\n")
 }
 
 /// Format structured topics into Markdown text with locale-aware labels.
