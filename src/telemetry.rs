@@ -17,10 +17,10 @@ pub fn init_tracing(config: &AppConfig) -> Result<Option<WorkerGuard>> {
 
     // If LOG_FILE_PATH is set, output to both stdout and file
     if let Some(ref log_path) = config.log_file_path {
-        if let Some(parent) = Path::new(log_path).parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = Path::new(log_path).parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
         }
 
         let file = OpenOptions::new()

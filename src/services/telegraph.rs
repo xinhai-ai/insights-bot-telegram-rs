@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // Telegraph service for publishing long content to Telegraph pages.
 // Ported from Go version: internal/services/telegraph/telegraph.go
 
@@ -147,17 +149,17 @@ impl TelegraphService {
                         .await
                         .context("failed to parse Telegraph response")?;
 
-                    if body.ok {
-                        if let Some(page) = body.result {
-                            info!(
-                                url = %page.url,
-                                path = %page.path,
-                                title = %title,
-                                node_len = node_len,
-                                "created Telegraph page"
-                            );
-                            return Ok(page.url);
-                        }
+                    if body.ok
+                        && let Some(page) = body.result
+                    {
+                        info!(
+                            url = %page.url,
+                            path = %page.path,
+                            title = %title,
+                            node_len = node_len,
+                            "created Telegraph page"
+                        );
+                        return Ok(page.url);
                     }
 
                     let error_msg = body.error.unwrap_or_else(|| "unknown error".to_string());
@@ -211,17 +213,17 @@ impl TelegraphService {
                         .await
                         .context("failed to parse Telegraph response")?;
 
-                    if body.ok {
-                        if let Some(page) = body.result {
-                            info!(
-                                url = %page.url,
-                                path = %path,
-                                title = %title,
-                                node_len = node_len,
-                                "edited Telegraph page"
-                            );
-                            return Ok(page.url);
-                        }
+                    if body.ok
+                        && let Some(page) = body.result
+                    {
+                        info!(
+                            url = %page.url,
+                            path = %path,
+                            title = %title,
+                            node_len = node_len,
+                            "edited Telegraph page"
+                        );
+                        return Ok(page.url);
                     }
 
                     let error_msg = body.error.unwrap_or_else(|| "unknown error".to_string());
@@ -290,17 +292,17 @@ impl TelegraphService {
                         .await
                         .context("failed to parse Telegraph response")?;
 
-                    if body.ok {
-                        if let Some(page) = body.result {
-                            info!(
-                                url = %page.url,
-                                path = %page.path,
-                                title = %title,
-                                node_len = content.len(),
-                                "created Telegraph page (nodes)"
-                            );
-                            return Ok(page.url);
-                        }
+                    if body.ok
+                        && let Some(page) = body.result
+                    {
+                        info!(
+                            url = %page.url,
+                            path = %page.path,
+                            title = %title,
+                            node_len = content.len(),
+                            "created Telegraph page (nodes)"
+                        );
+                        return Ok(page.url);
                     }
 
                     let error_msg = body.error.unwrap_or_else(|| "unknown error".to_string());

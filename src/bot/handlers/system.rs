@@ -29,5 +29,5 @@ impl SystemHandlers {
 }
 
 fn command_list() -> String {
-    format!("Commands:\n{}", Command::descriptions().to_string())
+    format!("Commands:\n{}", Command::descriptions())
 }

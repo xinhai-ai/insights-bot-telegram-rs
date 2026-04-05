@@ -5,10 +5,7 @@ use teloxide::{RequestError, dispatching::DefaultKey, dptree, prelude::*};
 use crate::bot::{
     commands::Command,
     context::AppContext,
-    handlers::{
-        recap::RecapHandlers, recap_forwarded::RecapForwardedHandlers,
-        subscribe::SubscribeHandlers, system::SystemHandlers,
-    },
+    handlers::{recap::RecapHandlers, system::SystemHandlers},
     middleware,
 };
 
@@ -24,21 +21,6 @@ pub fn build_dispatcher(
         .branch(dptree::case![Command::Recap].endpoint(RecapHandlers::handle_recap))
         .branch(
             dptree::case![Command::ConfigureRecap].endpoint(RecapHandlers::handle_configure_recap),
-        )
-        .branch(
-            dptree::case![Command::RecapForwardedStart]
-                .endpoint(RecapForwardedHandlers::handle_start_forwarded),
-        )
-        .branch(
-            dptree::case![Command::RecapForwarded]
-                .endpoint(RecapForwardedHandlers::handle_forwarded),
-        )
-        .branch(
-            dptree::case![Command::SubscribeRecap].endpoint(SubscribeHandlers::handle_subscribe),
-        )
-        .branch(
-            dptree::case![Command::UnsubscribeRecap]
-                .endpoint(SubscribeHandlers::handle_unsubscribe),
         );
 
     // Message handler: record ALL messages first, then try commands

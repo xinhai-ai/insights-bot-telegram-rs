@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use anyhow::{Context, Result};
 use async_openai::{
     Client,
@@ -556,10 +558,10 @@ pub fn format_topics_to_markdown(
         }
 
         // Conclusion (optional)
-        if let Some(conclusion) = &topic.conclusion {
-            if !conclusion.is_empty() {
-                output.push(format!("{}{}{}", conclusion_label, colon, conclusion));
-            }
+        if let Some(conclusion) = &topic.conclusion
+            && !conclusion.is_empty()
+        {
+            output.push(format!("{}{}{}", conclusion_label, colon, conclusion));
         }
 
         output.push(String::new()); // Empty line between topics

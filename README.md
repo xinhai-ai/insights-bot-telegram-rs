@@ -4,12 +4,10 @@ Telegram-only rewrite of the recap bot inspired by the original Go implementatio
 
 ## Features (parity target from Go version)
 - `/start`, `/help`, `/cancel`
-- `/recap`: summarize recent group/private messages
-- `/configure_recap`: configure recap mode, auto-recap toggle and frequency
-- `/subscribe_recap` / `/unsubscribe_recap`: user subscriptions to group recap
-- `/recap_forwarded_start` / `/recap_forwarded`: collect forwarded messages in DM then recap
+- `/recap`: summarize recent group messages
+- `/configure_recap`: configure recap enablement and auto-recap delivery
 - Auto recap worker: periodic recap per group based on config
-- Callback handling for recap configuration and feedback (skeleton ready)
+- Callback handling for recap configuration
 
 ## Tech stack
 - Runtime: `tokio`
@@ -41,9 +39,11 @@ Telegram-only rewrite of the recap bot inspired by the original Go implementatio
 ### Running migrations
 - Postgres: `DATABASE_URL=postgres://... sqlx migrate run`
 - SQLite: `DATABASE_URL=sqlite://data/dev.db sqlx migrate run`
+- This service only supports the Rust schema defined in `migrations/postgres/0001_init.sql` and `migrations/sqlite/0001_init.sql`.
+- Existing PostgreSQL databases created by the Go bot are rejected at startup and must be migrated into the Rust schema before use.
 
 ### Message recording
-- Middleware records incoming text/caption messages into `chat_histories`; forwarded texts in private chats are also stored in `forwarded_histories` for `/recap_forwarded`.
+- Middleware records incoming group text/caption messages into `chat_histories` for recap generation.
 
 ### Important: Group Permissions
 For the bot to receive and record all messages in a group (not just commands), you must do **ONE** of the following:
@@ -53,23 +53,46 @@ For the bot to receive and record all messages in a group (not just commands), y
 Without this, the bot will only receive messages that directly mention it (e.g., `/recap@your_bot`) or are replies to the bot's messages.
 
 ### Recap configuration
-- `/configure_recap` shows inline buttons to toggle recap on/off, auto recap on/off, and select per-day frequency; settings are stored in `recap_configs`.
+- `/configure_recap` shows inline buttons to toggle recap on/off and auto recap on/off; settings are stored in `recap_configs`.
 
 ### Auto recap
-- Background worker (60s tick) finds chats due for auto recap, generates recap, sends to the group and best-effort to subscribers, then updates `last_recap_at`.
+- Background worker finds chats due for auto recap on a fixed 6-hour cadence, generates recap, sends it to the originating group, then updates `last_recap_at`.
 
-### Subscriptions
-- `/subscribe_recap` (in group): user subscribes to that group’s recap; `/unsubscribe_recap` cancels. Auto recap will DM subscribers the recap as well.
+### Migration from the Go bot
 
-### Forwarded recap flow
-- `/recap_forwarded_start`: in DM, tells user to forward messages; forwarded texts are stored.
-- `/recap_forwarded`: summarizes stored forwarded messages and clears them. If none, prompts user to forward first.
+The Rust service does not run directly on the legacy Go PostgreSQL schema. Migration from the Go bot is a one-time transform into the Rust-owned schema.
+
+#### Retained domains
+- `telegram_chats` can be mapped into `chats`.
+- Group `chat_histories` can be transformed into the Rust `chat_histories` table.
+- Recap enablement and auto recap enablement can be derived from `telegram_chat_feature_flags` and `telegram_chat_recaps_options` and stored in `recap_configs`.
+- `last_recap_at` can be carried forward into `recap_configs` when the legacy value is safe to reuse.
+- `log_chat_histories_recaps` can be imported into `recap_logs` on a best-effort basis by mapping supported fields only.
+
+#### Dropped domains
+- Private recap subscriptions from `telegram_chat_auto_recaps_subscribers`
+- Forwarded recap state stored outside PostgreSQL in the Go bot
+- Recap feedback reactions
+- Sent-message pin tracking
+- Legacy recap delivery mode and per-chat recap frequency selection
+
+#### One-time migration order
+1. Stop the Go bot and take a database snapshot.
+2. Start with a fresh database for the Rust service and let the Rust migrations create the supported schema.
+3. Export retained entities from the Go database.
+4. Transform Go records into the Rust table shapes:
+   - `telegram_chats` -> `chats`
+   - supported group `chat_histories` -> `chat_histories`
+   - feature flags and recap options -> `recap_configs`
+   - optional recap logs -> `recap_logs`
+5. Skip the dropped domains listed above.
+6. Start the Rust service against the migrated Rust schema and verify recap generation before decommissioning the Go deployment.
 
 ### Known warnings
-- Unused helpers/fields (webhook config, add_feedback, media/whisper placeholders) remain until later phases implement those features.
+- Webhook configuration and media/whisper placeholders remain outside the recap core scope.
 
 ### Rate limiting
-- `/recap` and `/recap_forwarded` are limited per chat+command (default 3 requests per 60s); exceeding the limit replies with a friendly notice.
+- `/recap` is limited per chat+command (default 3 requests per 60s); exceeding the limit replies with a friendly notice.
 
 ## Status
 - Bot/handlers/services/db scaffolding is complete.

@@ -9,6 +9,8 @@ use tracing::{error, info, warn};
 use crate::bot::handlers::recap::build_recap_nodes;
 use crate::{bot::context::AppContext, services::recap::RecapService};
 
+const AUTO_RECAP_INTERVAL_SECS: i64 = 6 * 60 * 60;
+
 pub async fn spawn_autorecap(ctx: Arc<AppContext>) {
     tokio::spawn(async move {
         let mut ticker = interval(Duration::from_secs(60));
@@ -23,7 +25,9 @@ pub async fn spawn_autorecap(ctx: Arc<AppContext>) {
 
 async fn run_once(ctx: Arc<AppContext>) -> anyhow::Result<()> {
     let now = Utc::now().timestamp();
-    let configs = crate::db::recap_config::list_due_for_auto_recap(&ctx.db.pool, now).await?;
+    let due_before = now - AUTO_RECAP_INTERVAL_SECS;
+    let configs =
+        crate::db::recap_config::list_due_for_auto_recap(&ctx.db.pool, due_before).await?;
     if configs.is_empty() {
         return Ok(());
     }
@@ -109,25 +113,6 @@ async fn run_once(ctx: Arc<AppContext>) -> anyhow::Result<()> {
                     .await
                 {
                     warn!("auto_recap send to chat {} failed: {err:?}", cfg.chat_id);
-                }
-
-                // send to subscribers best-effort
-                match crate::db::recap_config::list_subscribers(&ctx.db.pool, cfg.chat_id).await {
-                    Ok(subs) => {
-                        for sub in subs {
-                            if let Err(err) = bot
-                                .send_message(ChatId(sub.user_id), msg_body.clone())
-                                .parse_mode(teloxide::types::ParseMode::Html)
-                                .await
-                            {
-                                warn!(
-                                    "auto_recap send to subscriber {} failed: {err:?}",
-                                    sub.user_id
-                                );
-                            }
-                        }
-                    }
-                    Err(err) => warn!("list_subscribers failed: {err:?}"),
                 }
 
                 if let Err(err) = crate::db::recap_config::upsert_recap_config(

@@ -17,12 +17,4 @@ pub enum Command {
     Recap,
     #[command(description = "Configure recap settings")]
     ConfigureRecap,
-    #[command(description = "Subscribe to group recaps")]
-    SubscribeRecap,
-    #[command(description = "Unsubscribe from group recaps")]
-    UnsubscribeRecap,
-    #[command(description = "Start forwarded message collection")]
-    RecapForwardedStart,
-    #[command(description = "End collection and recap forwarded")]
-    RecapForwarded,
 }

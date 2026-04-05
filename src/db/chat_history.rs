@@ -1,8 +1,9 @@
 use anyhow::Result;
 use sqlx::AnyPool;
 
-use super::models::{ChatHistory, ForwardedHistory, MessageKind};
+use super::models::{ChatHistory, MessageKind};
 
+#[allow(clippy::too_many_arguments)]
 pub async fn insert_message(
     pool: &AnyPool,
     chat_id: i64,
@@ -52,51 +53,17 @@ pub async fn recent_messages(pool: &AnyPool, chat_id: i64, limit: i64) -> Result
     Ok(rows)
 }
 
-pub async fn insert_forwarded(
-    pool: &AnyPool,
-    user_id: i64,
-    from_chat_id: Option<i64>,
-    message_id: Option<i64>,
-    kind: MessageKind,
-    text: Option<String>,
-    created_at: i64,
-) -> Result<()> {
-    sqlx::query(
-        "INSERT INTO forwarded_histories (user_id, from_chat_id, message_id, kind, text, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6)",
+pub async fn is_recap_enabled(pool: &AnyPool, chat_id: i64) -> Result<bool> {
+    let row: Option<(i64,)> = sqlx::query_as(
+        "SELECT CASE WHEN enabled THEN 1 ELSE 0 END
+         FROM recap_configs
+         WHERE chat_id = $1
+         LIMIT 1",
     )
-    .bind(user_id)
-    .bind(from_chat_id)
-    .bind(message_id)
-    .bind(kind.as_str())
-    .bind(text)
-    .bind(created_at)
-    .execute(pool)
+    .bind(chat_id)
+    .fetch_optional(pool)
     .await?;
-    Ok(())
-}
-
-pub async fn list_forwarded(
-    pool: &AnyPool,
-    user_id: i64,
-    limit: i64,
-) -> Result<Vec<ForwardedHistory>> {
-    let rows = sqlx::query_as::<_, ForwardedHistory>(
-        "SELECT * FROM forwarded_histories WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2",
-    )
-    .bind(user_id)
-    .bind(limit)
-    .fetch_all(pool)
-    .await?;
-    Ok(rows)
-}
-
-pub async fn clear_forwarded(pool: &AnyPool, user_id: i64) -> Result<()> {
-    sqlx::query("DELETE FROM forwarded_histories WHERE user_id = $1")
-        .bind(user_id)
-        .execute(pool)
-        .await?;
-    Ok(())
+    Ok(row.map(|(enabled,)| enabled != 0).unwrap_or(true))
 }
 
 /// Find chat messages within the specified time duration (hours) before now.
@@ -126,6 +93,7 @@ pub async fn messages_since_hours(
 }
 
 /// Count messages in a chat within the specified time duration.
+#[allow(dead_code)]
 pub async fn count_messages_since_hours(pool: &AnyPool, chat_id: i64, hours: i64) -> Result<i64> {
     let since_timestamp = chrono::Utc::now().timestamp() - (hours * 3600);
     let row: (i64,) = sqlx::query_as(

@@ -7,13 +7,9 @@ system:
     可用命令：
     /start - 显示欢迎消息
     /help - 显示帮助
+    /cancel - 取消当前操作
     /recap - 生成聊天回顾
     /configure_recap - 配置回顾设置
-    /subscribe_recap - 订阅群组回顾
-    /unsubscribe_recap - 取消订阅群组回顾
-    /recap_forwarded_start - 开始转发消息收集
-    /recap_forwarded - 结束收集并生成回顾
-    /cancel - 取消当前操作
   cancel: "操作已取消。"
 
 # 回顾相关消息
@@ -22,6 +18,8 @@ recap:
   processing_hours: "⏳ 正在为过去 {hours} 小时的聊天记录生成回顾，请稍等..."
   failed: "回顾生成失败，请稍后再试。"
   fetch_failed: "获取聊天记录失败，请稍后再试。"
+  group_only: "此命令仅在群组中可用。"
+  disabled: "此群组的回顾功能目前已关闭，请先使用 /configure_recap 启用。"
   no_messages: "没有可用的消息进行回顾。"
   min_messages: "过去 {hours} 小时内只有 {count} 条文字消息，至少需要 5 条才能生成回顾。"
   rate_limited: "请求过于频繁，请稍后再试。"
@@ -34,10 +32,6 @@ recap:
   no_telegraph: "📊 过去 {hours} 小时的聊天回顾（Telegraph 不可用）\n\n<b>浓缩总结：</b>\n{condensed}\n\n<b>分段总结：</b>\n{segmented}\n\n#recap\n🤖️ 浓缩总结由 {condensed_model} 生成\n🤖️ 分段总结由 {segmented_model} 生成"
   auto_published: "📝 <b>聊天回顾已发布到 Telegraph</b>: <a href=\"{url}\">{title}</a>\n\n<b>浓缩总结：</b>\n{condensed}\n\n#recap #recap_auto\n<i>群组：{group}</i>\n🤖️ 浓缩总结由 {condensed_model} 生成\n🤖️ 分段总结由 {segmented_model} 生成"
   auto_no_telegraph: "📊 自动聊天回顾（Telegraph 失败）\n\n<b>浓缩：</b>\n{condensed}\n\n<b>分段：</b>\n{segmented}\n\n#recap #recap_auto\n<i>群组：{group}</i>\n🤖️ 浓缩总结由 {condensed_model} 生成\n🤖️ 分段总结由 {segmented_model} 生成"
-  forwarded:
-    start: "转发消息收集已开始。请将消息转发给我，然后使用 /recap_forwarded 生成总结。"
-    no_messages: "没有可用的转发消息。请先使用 /recap_forwarded_start 并转发一些消息。"
-    unable_to_identify: "无法识别用户。"
 
 # 配置消息
 config:
@@ -47,23 +41,9 @@ config:
   title: "回顾设置"
   enabled: "启用"
   auto_recap: "自动回顾"
-  times_per_day: "每天次数"
   on: "开"
   off: "关"
   tap_to_adjust: "点击按钮进行调整。"
-
-# 订阅消息
-subscribe:
-  group_only: "请在群组中使用此命令来订阅该群的回顾。"
-  success: "已订阅本群组回顾。"
-  failed: "订阅失败，请稍后再试。"
-  unable_to_identify: "无法识别用户。"
-
-# 取消订阅消息
-unsubscribe:
-  group_only: "请在群组中使用此命令来取消该群的回顾订阅。"
-  success: "已取消订阅本群组回顾。"
-  failed: "取消订阅失败，请稍后再试。"
 
 # Telegraph 相关
 telegraph:

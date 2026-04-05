@@ -75,19 +75,19 @@ fn load_env() -> Result<()> {
     }
 
     // Fallback: directory containing the executable (double-click scenarios).
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(dir) = exe_path.parent() {
-            let env_path = dir.join(".env");
-            if env_path.exists() {
-                if let Err(e) = dotenvy::from_path(&env_path) {
-                    warn!(
-                        error = %e,
-                        path = %env_path.display(),
-                        "strict .env parsing failed; falling back to lenient parser"
-                    );
-                    load_env_lenient(&env_path)?;
-                }
-            }
+    if let Ok(exe_path) = std::env::current_exe()
+        && let Some(dir) = exe_path.parent()
+    {
+        let env_path = dir.join(".env");
+        if env_path.exists()
+            && let Err(e) = dotenvy::from_path(&env_path)
+        {
+            warn!(
+                error = %e,
+                path = %env_path.display(),
+                "strict .env parsing failed; falling back to lenient parser"
+            );
+            load_env_lenient(&env_path)?;
         }
     }
 
