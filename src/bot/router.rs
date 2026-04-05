@@ -5,7 +5,7 @@ use teloxide::{RequestError, dispatching::DefaultKey, dptree, prelude::*};
 use crate::bot::{
     commands::Command,
     context::AppContext,
-    handlers::{recap::RecapHandlers, system::SystemHandlers},
+    handlers::{migration::MigrationHandlers, recap::RecapHandlers, system::SystemHandlers},
     middleware,
 };
 
@@ -23,6 +23,9 @@ pub fn build_dispatcher(
             dptree::case![Command::ConfigureRecap].endpoint(RecapHandlers::handle_configure_recap),
         );
 
+    let migration_filter = dptree::filter(|msg: Message| msg.migrate_to_chat_id().is_some())
+        .endpoint(MigrationHandlers::handle_chat_migration);
+
     // Message handler: record ALL messages first, then try commands
     let message_handler = Update::filter_message()
         // Use inspect to record message as side effect (doesn't affect control flow)
@@ -33,14 +36,27 @@ pub fn build_dispatcher(
                 middleware::record_message(ctx, msg).await;
             });
         })
+        // Catch migration events before command parsing
+        .branch(migration_filter)
         // Then try to match commands
         .branch(commands);
+
+    let edited_message_handler = Update::filter_edited_message().inspect(
+        |ctx: Arc<AppContext>, msg: Message| {
+            let ctx = ctx.clone();
+            let msg = msg.clone();
+            tokio::spawn(async move {
+                middleware::record_edited_message(ctx, msg).await;
+            });
+        },
+    );
 
     let callback_handler =
         Update::filter_callback_query().endpoint(RecapHandlers::handle_callback_query);
 
     let handler = dptree::entry()
         .branch(message_handler)
+        .branch(edited_message_handler)
         .branch(callback_handler);
 
     Dispatcher::builder(bot, handler)

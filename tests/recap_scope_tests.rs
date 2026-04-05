@@ -1,6 +1,6 @@
 use insights_bot_telegram_rs::{
     bot::commands::Command,
-    db::{chat_history, models::RecapConfig, recap_config},
+    db::{chat_history, migration, models::RecapConfig, models::MessageKind, recap_config},
 };
 use sqlx::{AnyPool, any::AnyPoolOptions};
 use teloxide::utils::command::BotCommands;
@@ -13,26 +13,49 @@ async fn setup_sqlite_pool() -> AnyPool {
         .await
         .expect("sqlite memory pool");
 
-    for statement in include_str!("../migrations/sqlite/0001_init.sql").split(';') {
-        let stmt: String = statement
-            .lines()
-            .filter(|line| {
-                let trimmed = line.trim();
-                !trimmed.is_empty() && !trimmed.starts_with("--")
-            })
-            .collect::<Vec<_>>()
-            .join("\n");
-        let stmt = stmt.trim();
-        if stmt.is_empty() {
-            continue;
+    // Run both migrations
+    let migrations = [
+        include_str!("../migrations/sqlite/0001_init.sql"),
+        include_str!("../migrations/sqlite/0002_recap_config_extensions.sql"),
+    ];
+
+    for migration_sql in migrations {
+        for statement in migration_sql.split(';') {
+            let stmt: String = statement
+                .lines()
+                .filter(|line| {
+                    let trimmed = line.trim();
+                    !trimmed.is_empty() && !trimmed.starts_with("--")
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            let stmt = stmt.trim();
+            if stmt.is_empty() {
+                continue;
+            }
+            if let Err(err) = sqlx::query(stmt).execute(&pool).await {
+                let msg = err.to_string();
+                if !msg.contains("duplicate column") {
+                    panic!("migration failed: {msg}");
+                }
+            }
         }
-        sqlx::query(stmt)
-            .execute(&pool)
-            .await
-            .expect("migration statement should run");
     }
 
     pool
+}
+
+fn default_config(chat_id: i64) -> RecapConfig {
+    RecapConfig {
+        chat_id,
+        enabled: true,
+        auto_recap_enabled: false,
+        last_recap_at: None,
+        updated_at: None,
+        auto_recap_rates_per_day: 4,
+        pin_auto_recap_message: false,
+        last_pinned_message_id: None,
+    }
 }
 
 #[test]
@@ -59,15 +82,13 @@ fn command_surface_only_lists_supported_commands() {
 }
 
 #[tokio::test]
-async fn disabled_chat_blocks_message_capture_and_auto_recap_due_selection() {
+async fn disabled_chat_blocks_message_capture_and_auto_recap_listing() {
     let pool = setup_sqlite_pool().await;
 
     let cfg = RecapConfig {
-        chat_id: 42,
         enabled: false,
         auto_recap_enabled: true,
-        last_recap_at: None,
-        updated_at: None,
+        ..default_config(42)
     };
     recap_config::upsert_recap_config(&pool, &cfg)
         .await
@@ -79,67 +100,249 @@ async fn disabled_chat_blocks_message_capture_and_auto_recap_due_selection() {
             .expect("enablement lookup should succeed")
     );
 
-    let due = recap_config::list_due_for_auto_recap(&pool, i64::MAX)
+    let all = recap_config::list_auto_recap_enabled(&pool)
         .await
-        .expect("due lookup should succeed");
+        .expect("list should succeed");
     assert!(
-        due.iter().all(|item| item.chat_id != 42),
-        "disabled chat must not be due for auto recap"
+        all.iter().all(|item| item.chat_id != 42),
+        "disabled chat must not appear in auto-recap list"
     );
 }
 
 #[tokio::test]
-async fn due_query_respects_fixed_cutoff_timestamp() {
+async fn auto_recap_enabled_configs_are_listed() {
     let pool = setup_sqlite_pool().await;
 
     recap_config::upsert_recap_config(
         &pool,
         &RecapConfig {
-            chat_id: 1,
             enabled: true,
             auto_recap_enabled: true,
             last_recap_at: Some(100),
-            updated_at: None,
+            ..default_config(1)
         },
     )
     .await
-    .expect("old config insert should succeed");
+    .expect("config insert should succeed");
 
     recap_config::upsert_recap_config(
         &pool,
         &RecapConfig {
-            chat_id: 2,
             enabled: true,
-            auto_recap_enabled: true,
-            last_recap_at: Some(900),
-            updated_at: None,
+            auto_recap_enabled: false,
+            ..default_config(2)
         },
     )
     .await
-    .expect("recent config insert should succeed");
+    .expect("config insert should succeed");
 
     recap_config::upsert_recap_config(
         &pool,
         &RecapConfig {
-            chat_id: 3,
             enabled: true,
             auto_recap_enabled: true,
             last_recap_at: None,
-            updated_at: None,
+            ..default_config(3)
         },
     )
     .await
-    .expect("never-run config insert should succeed");
+    .expect("config insert should succeed");
 
-    let due = recap_config::list_due_for_auto_recap(&pool, 500)
+    let configs = recap_config::list_auto_recap_enabled(&pool)
         .await
-        .expect("due lookup should succeed");
-    let due_chat_ids: Vec<i64> = due.into_iter().map(|item| item.chat_id).collect();
+        .expect("list should succeed");
+    let ids: Vec<i64> = configs.iter().map(|c| c.chat_id).collect();
 
-    assert!(due_chat_ids.contains(&1), "older chat should be due");
-    assert!(due_chat_ids.contains(&3), "never-run chat should be due");
+    assert!(ids.contains(&1), "auto-recap enabled chat should be listed");
+    assert!(ids.contains(&3), "auto-recap enabled chat should be listed");
     assert!(
-        !due_chat_ids.contains(&2),
-        "chat newer than the fixed cutoff must not be due"
+        !ids.contains(&2),
+        "auto-recap disabled chat should not be listed"
     );
+}
+
+#[tokio::test]
+async fn frequency_and_pin_fields_round_trip() {
+    let pool = setup_sqlite_pool().await;
+
+    recap_config::upsert_recap_config(
+        &pool,
+        &RecapConfig {
+            auto_recap_rates_per_day: 3,
+            pin_auto_recap_message: true,
+            last_pinned_message_id: Some(12345),
+            ..default_config(100)
+        },
+    )
+    .await
+    .expect("upsert should succeed");
+
+    let cfg = recap_config::get_recap_config(&pool, 100)
+        .await
+        .expect("get should succeed")
+        .expect("config should exist");
+
+    assert_eq!(cfg.auto_recap_rates_per_day, 3);
+    assert!(cfg.pin_auto_recap_message);
+    assert_eq!(cfg.last_pinned_message_id, Some(12345));
+}
+
+#[tokio::test]
+async fn set_auto_recap_rates_per_day_updates_correctly() {
+    let pool = setup_sqlite_pool().await;
+
+    recap_config::upsert_recap_config(&pool, &default_config(200))
+        .await
+        .expect("upsert should succeed");
+
+    recap_config::set_auto_recap_rates_per_day(&pool, 200, 2)
+        .await
+        .expect("set rates should succeed");
+
+    let cfg = recap_config::get_recap_config(&pool, 200)
+        .await
+        .expect("get should succeed")
+        .expect("config should exist");
+
+    assert_eq!(cfg.auto_recap_rates_per_day, 2);
+}
+
+#[tokio::test]
+async fn set_pin_auto_recap_message_updates_correctly() {
+    let pool = setup_sqlite_pool().await;
+
+    recap_config::upsert_recap_config(&pool, &default_config(300))
+        .await
+        .expect("upsert should succeed");
+
+    recap_config::set_pin_auto_recap_message(&pool, 300, true)
+        .await
+        .expect("set pin should succeed");
+
+    let cfg = recap_config::get_recap_config(&pool, 300)
+        .await
+        .expect("get should succeed")
+        .expect("config should exist");
+
+    assert!(cfg.pin_auto_recap_message);
+}
+
+#[tokio::test]
+async fn default_config_has_expected_values() {
+    let pool = setup_sqlite_pool().await;
+
+    let cfg = recap_config::get_or_create_recap_config(&pool, 999)
+        .await
+        .expect("get_or_create should succeed");
+
+    assert_eq!(cfg.auto_recap_rates_per_day, 4, "default frequency should be 4x/day");
+    assert!(!cfg.pin_auto_recap_message, "pin should default to false");
+    assert_eq!(cfg.last_pinned_message_id, None, "no pinned message initially");
+}
+
+// -- Tests for update_message_text (Task 9.2) --
+
+#[tokio::test]
+async fn update_message_text_updates_existing_message() {
+    let pool = setup_sqlite_pool().await;
+
+    chat_history::insert_message(&pool, 10, 100, Some(1), Some("Alice".into()), Some("alice".into()), MessageKind::Text, Some("original text".into()), None, 1000)
+        .await
+        .expect("insert should succeed");
+
+    chat_history::update_message_text(&pool, 10, 100, "edited text")
+        .await
+        .expect("update should succeed");
+
+    let msgs = chat_history::recent_messages(&pool, 10, 10)
+        .await
+        .expect("fetch should succeed");
+    assert_eq!(msgs.len(), 1);
+    assert_eq!(msgs[0].text, "edited text");
+}
+
+#[tokio::test]
+async fn update_message_text_noop_on_missing_message() {
+    let pool = setup_sqlite_pool().await;
+
+    // No message inserted; update should succeed but change nothing
+    chat_history::update_message_text(&pool, 10, 999, "some text")
+        .await
+        .expect("update on missing should not fail");
+}
+
+// -- Tests for migrate_chat_data (Task 9.3) --
+
+#[tokio::test]
+async fn migrate_chat_data_moves_histories_and_config() {
+    let pool = setup_sqlite_pool().await;
+
+    // Insert chat history and config for old chat_id
+    chat_history::insert_message(&pool, 50, 1, Some(1), Some("Bob".into()), None, MessageKind::Text, Some("hello".into()), None, 2000)
+        .await
+        .expect("insert msg");
+    recap_config::upsert_recap_config(&pool, &RecapConfig {
+        auto_recap_enabled: true,
+        ..default_config(50)
+    }).await.expect("insert config");
+
+    // Migrate from 50 to 500
+    migration::migrate_chat_data(&pool, 50, 500)
+        .await
+        .expect("migration should succeed");
+
+    // Old chat_id should have no messages
+    let old_msgs = chat_history::recent_messages(&pool, 50, 10).await.expect("fetch old");
+    assert!(old_msgs.is_empty(), "old chat should have no messages after migration");
+
+    // New chat_id should have the message
+    let new_msgs = chat_history::recent_messages(&pool, 500, 10).await.expect("fetch new");
+    assert_eq!(new_msgs.len(), 1);
+    assert_eq!(new_msgs[0].text, "hello");
+
+    // Config should be under new chat_id
+    let old_cfg = recap_config::get_recap_config(&pool, 50).await.expect("fetch old cfg");
+    assert!(old_cfg.is_none(), "old config should be gone");
+
+    let new_cfg = recap_config::get_recap_config(&pool, 500).await.expect("fetch new cfg");
+    assert!(new_cfg.is_some(), "new config should exist");
+    assert!(new_cfg.unwrap().auto_recap_enabled);
+}
+
+#[tokio::test]
+async fn migrate_chat_data_handles_conflict_gracefully() {
+    let pool = setup_sqlite_pool().await;
+
+    // Both old and new already have configs
+    recap_config::upsert_recap_config(&pool, &RecapConfig {
+        auto_recap_rates_per_day: 2,
+        ..default_config(60)
+    }).await.expect("insert old config");
+    recap_config::upsert_recap_config(&pool, &RecapConfig {
+        auto_recap_rates_per_day: 3,
+        ..default_config(600)
+    }).await.expect("insert new config");
+
+    // Migration should succeed without PK conflict
+    migration::migrate_chat_data(&pool, 60, 600)
+        .await
+        .expect("migration with conflict should succeed");
+
+    // New config should still exist (either the old or new, depending on impl)
+    let cfg = recap_config::get_recap_config(&pool, 600)
+        .await
+        .expect("fetch")
+        .expect("config should exist");
+    // New config takes precedence (3), old is deleted
+    assert_eq!(cfg.auto_recap_rates_per_day, 3);
+}
+
+#[tokio::test]
+async fn migrate_chat_data_noop_on_empty() {
+    let pool = setup_sqlite_pool().await;
+
+    // No data for chat 999 — should succeed as no-op
+    migration::migrate_chat_data(&pool, 999, 9999)
+        .await
+        .expect("empty migration should succeed");
 }

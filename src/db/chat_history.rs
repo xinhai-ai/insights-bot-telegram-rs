@@ -105,3 +105,21 @@ pub async fn count_messages_since_hours(pool: &AnyPool, chat_id: i64, hours: i64
     .await?;
     Ok(row.0)
 }
+
+/// Update the text of an existing message (for edited-message sync).
+pub async fn update_message_text(
+    pool: &AnyPool,
+    chat_id: i64,
+    message_id: i64,
+    new_text: &str,
+) -> Result<()> {
+    sqlx::query(
+        "UPDATE chat_histories SET text = $1 WHERE chat_id = $2 AND message_id = $3",
+    )
+    .bind(new_text)
+    .bind(chat_id)
+    .bind(message_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}

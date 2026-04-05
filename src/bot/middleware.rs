@@ -91,3 +91,44 @@ pub async fn record_message(ctx: Arc<AppContext>, msg: Message) {
         warn!("record_message failed: {err:?}");
     }
 }
+
+/// Update an edited message in the database. Called from the router as a side effect.
+pub async fn record_edited_message(ctx: Arc<AppContext>, msg: Message) {
+    let is_group_chat = msg.chat.is_group() || msg.chat.is_supergroup();
+    if !is_group_chat {
+        return;
+    }
+
+    match chat_history::is_recap_enabled(&ctx.db.pool, msg.chat.id.0).await {
+        Ok(false) => return,
+        Ok(true) => {}
+        Err(err) => {
+            warn!("failed to determine recap enablement: {err:?}");
+            return;
+        }
+    }
+
+    let new_text = msg
+        .text()
+        .map(|s| s.to_string())
+        .or_else(|| msg.caption().map(|s| s.to_string()));
+
+    if let Some(text) = new_text {
+        debug!(
+            chat_id = msg.chat.id.0,
+            message_id = msg.id.0,
+            "updating edited message"
+        );
+
+        if let Err(err) = chat_history::update_message_text(
+            &ctx.db.pool,
+            msg.chat.id.0,
+            msg.id.0 as i64,
+            &text,
+        )
+        .await
+        {
+            warn!("record_edited_message failed: {err:?}");
+        }
+    }
+}
