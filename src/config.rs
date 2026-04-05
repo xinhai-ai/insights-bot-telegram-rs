@@ -49,6 +49,7 @@ pub struct OpenAiConfig {
     pub api_base: Option<String>,
     pub model: String,
     pub token_limit: Option<u32>,
+    #[allow(dead_code)]
     pub recap_token_limit: Option<u32>,
 }
 

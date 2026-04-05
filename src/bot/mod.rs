@@ -37,16 +37,9 @@ async fn register_commands(bot: &Bot) -> Result<()> {
     let commands = vec![
         BotCommand::new("start", "Show welcome message"),
         BotCommand::new("help", "Show help"),
+        BotCommand::new("cancel", "Cancel current operation"),
         BotCommand::new("recap", "Generate chat recap"),
         BotCommand::new("configure_recap", "Configure recap settings"),
-        BotCommand::new("subscribe_recap", "Subscribe to group recaps"),
-        BotCommand::new("unsubscribe_recap", "Unsubscribe from group recaps"),
-        BotCommand::new(
-            "recap_forwarded_start",
-            "Start forwarded message collection",
-        ),
-        BotCommand::new("recap_forwarded", "End collection and recap forwarded"),
-        BotCommand::new("cancel", "Cancel current operation"),
     ];
 
     bot.set_my_commands(commands)

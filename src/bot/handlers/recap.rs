@@ -78,9 +78,7 @@ pub fn build_recap_nodes(
         }
 
         // Handle ## headers (topic titles)
-        if trimmed.starts_with("## ") {
-            let header_content = &trimmed[3..];
-
+        if let Some(header_content) = trimmed.strip_prefix("## ") {
             // Check if header contains a link
             if let Some(cap) = re_link.captures(header_content) {
                 let href = cap.get(1).unwrap().as_str();
@@ -135,10 +133,12 @@ pub fn build_recap_nodes(
 
         // Handle discussion points (lines starting with " - ")
         if trimmed.starts_with(" - ") || trimmed.starts_with("- ") {
-            let point_text = if trimmed.starts_with(" - ") {
-                &trimmed[3..]
+            let point_text = if let Some(point_text) = trimmed.strip_prefix(" - ") {
+                point_text
             } else {
-                &trimmed[2..]
+                trimmed
+                    .strip_prefix("- ")
+                    .expect("discussion points must start with a supported prefix")
             };
 
             // Parse links in the point text
@@ -269,6 +269,27 @@ impl RecapHandlers {
     /// Handle /recap command - shows time selection buttons.
     pub async fn handle_recap(bot: Bot, msg: Message, ctx: Arc<AppContext>) -> ResponseResult<()> {
         let chat_id = msg.chat.id;
+        if !msg.chat.is_group() && !msg.chat.is_supergroup() {
+            let text = ctx.i18n.t(ctx.config.locale, "recap.group_only", &[]);
+            bot.send_message(chat_id, text).await?;
+            return Ok(());
+        }
+
+        match chat_history::is_recap_enabled(&ctx.db.pool, chat_id.0).await {
+            Ok(false) => {
+                let text = ctx.i18n.t(ctx.config.locale, "recap.disabled", &[]);
+                bot.send_message(chat_id, text).await?;
+                return Ok(());
+            }
+            Ok(true) => {}
+            Err(err) => {
+                error!("failed to load recap enablement: {err:?}");
+                let text = ctx.i18n.t(ctx.config.locale, "config.load_failed", &[]);
+                bot.send_message(chat_id, text).await?;
+                return Ok(());
+            }
+        }
+
         let chat_title = msg
             .chat
             .title()
@@ -353,6 +374,20 @@ impl RecapHandlers {
 
         let chat_id: i64 = parts[2].parse().unwrap_or(0);
         let hours: i64 = parts[3].parse().unwrap_or(6);
+
+        match chat_history::is_recap_enabled(&ctx.db.pool, chat_id).await {
+            Ok(false) => {
+                let text = ctx.i18n.t(ctx.config.locale, "recap.disabled", &[]);
+                bot.answer_callback_query(callback_id).text(text).await?;
+                return Ok(());
+            }
+            Ok(true) => {}
+            Err(err) => {
+                error!("failed to load recap enablement for callback: {err:?}");
+                bot.answer_callback_query(callback_id).await?;
+                return Ok(());
+            }
+        }
 
         // Get original message info (the one with time selection buttons).
         let Some(original_msg) = q.message.as_ref() else {
@@ -544,10 +579,10 @@ impl RecapHandlers {
         }
 
         // Best-effort admin check.
-        if let Some(from) = msg.from() {
-            if let Err(err) = bot.get_chat_member(chat_id, from.id).await {
-                warn!("admin check skipped: {err:?}");
-            }
+        if let Some(from) = msg.from()
+            && let Err(err) = bot.get_chat_member(chat_id, from.id).await
+        {
+            warn!("admin check skipped: {err:?}");
         }
 
         let cfg = match crate::db::recap_config::get_or_create_recap_config(&ctx.db.pool, chat_id.0)
@@ -567,63 +602,102 @@ impl RecapHandlers {
         let title = ctx.i18n.t(ctx.config.locale, "config.title", &[]);
         let enabled_label = ctx.i18n.t(ctx.config.locale, "config.enabled", &[]);
         let auto_recap_label = ctx.i18n.t(ctx.config.locale, "config.auto_recap", &[]);
-        let times_per_day_label = ctx.i18n.t(ctx.config.locale, "config.times_per_day", &[]);
+        let freq_title = ctx.i18n.t(ctx.config.locale, "config.freq_title", &[]);
+        let pin_label = ctx.i18n.t(ctx.config.locale, "config.pin", &[]);
         let tap_to_adjust = ctx.i18n.t(ctx.config.locale, "config.tap_to_adjust", &[]);
 
+        let rates = cfg.auto_recap_rates_per_day;
+        let freq_display = format!("{}x", rates);
+        let pin_display = if cfg.pin_auto_recap_message {
+            &on_text
+        } else {
+            &off_text
+        };
+
         let text = format!(
-            "🔈 {}\n\n{}: {}\n{}: {}\n{}: {}\n\n{}",
-            title,
-            enabled_label,
-            if cfg.enabled { &on_text } else { &off_text },
-            auto_recap_label,
-            if cfg.auto_recap_enabled {
+            "🔈 {title}\n\n\
+             {enabled_label}: {enabled}\n\
+             {auto_recap_label}: {auto}\n\
+             {freq_title}: {freq_display}\n\
+             {pin_label}: {pin_display}\n\n\
+             {tap_to_adjust}",
+            enabled = if cfg.enabled { &on_text } else { &off_text },
+            auto = if cfg.auto_recap_enabled {
                 &on_text
             } else {
                 &off_text
             },
-            times_per_day_label,
-            cfg.auto_recap_rates_per_day.unwrap_or(1),
-            tap_to_adjust
         );
 
-        // Build keyboard with radio indicators.
+        // Row 1: Enabled toggle
         let (enable_on, enable_off) = if cfg.enabled {
             (format!("🔘 {}", on_text), off_text.to_string())
         } else {
             (on_text.to_string(), format!("🔘 {}", off_text))
         };
 
+        // Row 2: Auto-recap toggle
         let (auto_on, auto_off) = if cfg.auto_recap_enabled {
             (format!("🔘 {}", on_text), off_text.to_string())
         } else {
             (on_text.to_string(), format!("🔘 {}", off_text))
         };
 
-        let rate = cfg.auto_recap_rates_per_day.unwrap_or(1);
-        let rate_labels: Vec<String> = [1, 2, 4]
-            .iter()
-            .map(|&r| {
-                if r == rate {
-                    format!("🔘 {}x", r)
-                } else {
-                    format!("{}x", r)
-                }
-            })
-            .collect();
+        // Row 3: Frequency selection (2x, 3x, 4x)
+        let freq_2x = ctx.i18n.t(ctx.config.locale, "config.freq_2x", &[]);
+        let freq_3x = ctx.i18n.t(ctx.config.locale, "config.freq_3x", &[]);
+        let freq_4x = ctx.i18n.t(ctx.config.locale, "config.freq_4x", &[]);
+        let freq_2x_label = if rates == 2 {
+            format!("🔘 {}", freq_2x)
+        } else {
+            freq_2x
+        };
+        let freq_3x_label = if rates == 3 {
+            format!("🔘 {}", freq_3x)
+        } else {
+            freq_3x
+        };
+        let freq_4x_label = if rates == 4 {
+            format!("🔘 {}", freq_4x)
+        } else {
+            freq_4x
+        };
+
+        // Row 4: Pin toggle
+        let pin_on_label = ctx.i18n.t(ctx.config.locale, "config.pin_on", &[]);
+        let pin_off_label = ctx.i18n.t(ctx.config.locale, "config.pin_off", &[]);
+        let pin_on_text = if cfg.pin_auto_recap_message {
+            format!("🔘 {}", pin_on_label)
+        } else {
+            pin_on_label
+        };
+        let pin_off_text = if cfg.pin_auto_recap_message {
+            pin_off_label
+        } else {
+            format!("🔘 {}", pin_off_label)
+        };
 
         let kb = InlineKeyboardMarkup::new(vec![
+            // Row 1: Enabled
             vec![
                 InlineKeyboardButton::callback(enable_on, "cfg:enable:on"),
                 InlineKeyboardButton::callback(enable_off, "cfg:enable:off"),
             ],
+            // Row 2: Auto-recap
             vec![
                 InlineKeyboardButton::callback(auto_on, "cfg:auto:on"),
                 InlineKeyboardButton::callback(auto_off, "cfg:auto:off"),
             ],
+            // Row 3: Frequency
             vec![
-                InlineKeyboardButton::callback(&rate_labels[0], "cfg:rate:1"),
-                InlineKeyboardButton::callback(&rate_labels[1], "cfg:rate:2"),
-                InlineKeyboardButton::callback(&rate_labels[2], "cfg:rate:4"),
+                InlineKeyboardButton::callback(freq_2x_label, "cfg:freq:2"),
+                InlineKeyboardButton::callback(freq_3x_label, "cfg:freq:3"),
+                InlineKeyboardButton::callback(freq_4x_label, "cfg:freq:4"),
+            ],
+            // Row 4: Pin
+            vec![
+                InlineKeyboardButton::callback(pin_on_text, "cfg:pin:on"),
+                InlineKeyboardButton::callback(pin_off_text, "cfg:pin:off"),
             ],
         ]);
 
@@ -673,13 +747,39 @@ impl RecapHandlers {
                     .map_err(|e| error!("set auto failed: {e:?}"))
                     .ok();
             }
-            ("rate", v) => {
-                if let Ok(n) = v.parse::<i32>() {
-                    crate::db::recap_config::set_rates_per_day(&ctx.db.pool, chat_id.0, n)
-                        .await
-                        .map_err(|e| error!("set rate failed: {e:?}"))
-                        .ok();
+            ("freq", rate_str) => {
+                if let Ok(rate) = rate_str.parse::<i32>()
+                    && [2, 3, 4].contains(&rate)
+                {
+                    crate::db::recap_config::set_auto_recap_rates_per_day(
+                        &ctx.db.pool,
+                        chat_id.0,
+                        rate,
+                    )
+                    .await
+                    .map_err(|e| error!("set freq failed: {e:?}"))
+                    .ok();
                 }
+            }
+            ("pin", "on") => {
+                crate::db::recap_config::set_pin_auto_recap_message(
+                    &ctx.db.pool,
+                    chat_id.0,
+                    true,
+                )
+                .await
+                .map_err(|e| error!("set pin failed: {e:?}"))
+                .ok();
+            }
+            ("pin", "off") => {
+                crate::db::recap_config::set_pin_auto_recap_message(
+                    &ctx.db.pool,
+                    chat_id.0,
+                    false,
+                )
+                .await
+                .map_err(|e| error!("set pin failed: {e:?}"))
+                .ok();
             }
             _ => {}
         }

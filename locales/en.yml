@@ -7,13 +7,9 @@ system:
     Available commands:
     /start - Show welcome message
     /help - Show this help
+    /cancel - Cancel current operation
     /recap - Generate chat recap
     /configure_recap - Configure recap settings
-    /subscribe_recap - Subscribe to group recaps
-    /unsubscribe_recap - Unsubscribe from group recaps
-    /recap_forwarded_start - Start forwarded message collection
-    /recap_forwarded - End collection and recap forwarded
-    /cancel - Cancel current operation
   cancel: "Operation cancelled."
 
 # Recap related messages
@@ -22,6 +18,8 @@ recap:
   processing_hours: "⏳ Generating recap for the past {hours} hours, please wait..."
   failed: "Recap generation failed, please try later."
   fetch_failed: "Failed to fetch chat history, please try later."
+  group_only: "This command is only available in groups."
+  disabled: "Recap is disabled for this group. Enable it with /configure_recap first."
   no_messages: "No messages available for recap."
   min_messages: "Only {count} text messages in the past {hours} hours. At least 5 are required to generate a recap."
   rate_limited: "Too many recap requests, please slow down."
@@ -34,10 +32,6 @@ recap:
   no_telegraph: "📊 Chat recap for past {hours} hours (Telegraph unavailable)\n\n<b>Condensed:</b>\n{condensed}\n\n<b>Segmented:</b>\n{segmented}\n\n#recap\n🤖️ Condensed by {condensed_model}\n🤖️ Segmented by {segmented_model}"
   auto_published: "📝 <b>Chat recap published to Telegraph</b>: <a href=\"{url}\">{title}</a>\n\n<b>Condensed:</b>\n{condensed}\n\n#recap #recap_auto\n<i>Group: {group}</i>\n🤖️ Condensed by {condensed_model}\n🤖️ Segmented by {segmented_model}"
   auto_no_telegraph: "📊 Auto chat recap (Telegraph failed)\n\n<b>Condensed:</b>\n{condensed}\n\n<b>Segmented:</b>\n{segmented}\n\n#recap #recap_auto\n<i>Group: {group}</i>\n🤖️ Condensed by {condensed_model}\n🤖️ Segmented by {segmented_model}"
-  forwarded:
-    start: "Forwarded message collection started. Forward messages to me, then use /recap_forwarded to generate a summary."
-    no_messages: "No forwarded messages available. Please use /recap_forwarded_start first and forward some messages."
-    unable_to_identify: "Unable to identify user."
 
 # Configuration messages
 config:
@@ -47,23 +41,16 @@ config:
   title: "Recap Settings"
   enabled: "Enabled"
   auto_recap: "Auto recap"
-  times_per_day: "Times per day"
   on: "On"
   off: "Off"
+  freq_title: "Frequency"
+  freq_2x: "2x/day"
+  freq_3x: "3x/day"
+  freq_4x: "4x/day"
+  pin: "Pin recap"
+  pin_on: "Pin On"
+  pin_off: "Pin Off"
   tap_to_adjust: "Tap buttons to adjust."
-
-# Subscribe messages
-subscribe:
-  group_only: "Please use this command in a group to subscribe to its recaps."
-  success: "Subscribed to this group's recaps."
-  failed: "Subscription failed, please try later."
-  unable_to_identify: "Unable to identify user."
-
-# Unsubscribe messages
-unsubscribe:
-  group_only: "Please use this command in a group to unsubscribe from its recaps."
-  success: "Unsubscribed from this group's recaps."
-  failed: "Unsubscribe failed, please try later."
 
 # Telegraph related
 telegraph:

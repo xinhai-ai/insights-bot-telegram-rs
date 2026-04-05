@@ -5,10 +5,7 @@ use teloxide::{RequestError, dispatching::DefaultKey, dptree, prelude::*};
 use crate::bot::{
     commands::Command,
     context::AppContext,
-    handlers::{
-        recap::RecapHandlers, recap_forwarded::RecapForwardedHandlers,
-        subscribe::SubscribeHandlers, system::SystemHandlers,
-    },
+    handlers::{migration::MigrationHandlers, recap::RecapHandlers, system::SystemHandlers},
     middleware,
 };
 
@@ -24,22 +21,10 @@ pub fn build_dispatcher(
         .branch(dptree::case![Command::Recap].endpoint(RecapHandlers::handle_recap))
         .branch(
             dptree::case![Command::ConfigureRecap].endpoint(RecapHandlers::handle_configure_recap),
-        )
-        .branch(
-            dptree::case![Command::RecapForwardedStart]
-                .endpoint(RecapForwardedHandlers::handle_start_forwarded),
-        )
-        .branch(
-            dptree::case![Command::RecapForwarded]
-                .endpoint(RecapForwardedHandlers::handle_forwarded),
-        )
-        .branch(
-            dptree::case![Command::SubscribeRecap].endpoint(SubscribeHandlers::handle_subscribe),
-        )
-        .branch(
-            dptree::case![Command::UnsubscribeRecap]
-                .endpoint(SubscribeHandlers::handle_unsubscribe),
         );
+
+    let migration_filter = dptree::filter(|msg: Message| msg.migrate_to_chat_id().is_some())
+        .endpoint(MigrationHandlers::handle_chat_migration);
 
     // Message handler: record ALL messages first, then try commands
     let message_handler = Update::filter_message()
@@ -51,14 +36,27 @@ pub fn build_dispatcher(
                 middleware::record_message(ctx, msg).await;
             });
         })
+        // Catch migration events before command parsing
+        .branch(migration_filter)
         // Then try to match commands
         .branch(commands);
+
+    let edited_message_handler = Update::filter_edited_message().inspect(
+        |ctx: Arc<AppContext>, msg: Message| {
+            let ctx = ctx.clone();
+            let msg = msg.clone();
+            tokio::spawn(async move {
+                middleware::record_edited_message(ctx, msg).await;
+            });
+        },
+    );
 
     let callback_handler =
         Update::filter_callback_query().endpoint(RecapHandlers::handle_callback_query);
 
     let handler = dptree::entry()
         .branch(message_handler)
+        .branch(edited_message_handler)
         .branch(callback_handler);
 
     Dispatcher::builder(bot, handler)

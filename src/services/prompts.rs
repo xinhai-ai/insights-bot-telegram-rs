@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 // Prompt templates for OpenAI summarization, ported from Go version.
 
 use serde::{Deserialize, Serialize};
@@ -45,7 +47,7 @@ pub enum SummarizationMode {
 }
 
 impl SummarizationMode {
-    pub fn from_str(s: &str) -> Self {
+    pub fn from_mode_name(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "sarcastic" | "condensed" | "sarcastic_condensed" => Self::SarcasticCondensed,
             "structured" | "json" | "structured_json" => Self::StructuredJson,
@@ -84,22 +86,22 @@ impl PromptConfig {
     pub fn from_env() -> Self {
         let mut config = Self::default();
 
-        if let Ok(prompt) = std::env::var("SARCASTIC_CONDENSED_SYSTEM_PROMPT") {
-            if !prompt.is_empty() {
-                config.sarcastic_system_prompt = prompt;
-            }
+        if let Ok(prompt) = std::env::var("SARCASTIC_CONDENSED_SYSTEM_PROMPT")
+            && !prompt.is_empty()
+        {
+            config.sarcastic_system_prompt = prompt;
         }
 
-        if let Ok(prompt) = std::env::var("SARCASTIC_CONDENSED_USER_PROMPT") {
-            if !prompt.is_empty() {
-                config.sarcastic_user_prompt = prompt;
-            }
+        if let Ok(prompt) = std::env::var("SARCASTIC_CONDENSED_USER_PROMPT")
+            && !prompt.is_empty()
+        {
+            config.sarcastic_user_prompt = prompt;
         }
 
-        if let Ok(lang) = std::env::var("CHAT_HISTORIES_SUMMARIZATION_LANGUAGE") {
-            if !lang.is_empty() {
-                config.summarization_language = lang;
-            }
+        if let Ok(lang) = std::env::var("CHAT_HISTORIES_SUMMARIZATION_LANGUAGE")
+            && !lang.is_empty()
+        {
+            config.summarization_language = lang;
         }
 
         config

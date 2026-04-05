@@ -1,12 +1,26 @@
 use std::sync::Arc;
 
-use teloxide::types::{ChatKind, Message};
+use teloxide::types::Message;
 use tracing::{debug, warn};
 
 use crate::{bot::context::AppContext, db::chat_history, db::models::MessageKind};
 
 /// Record a message to the database. Called from the router as a side effect.
 pub async fn record_message(ctx: Arc<AppContext>, msg: Message) {
+    let is_group_chat = msg.chat.is_group() || msg.chat.is_supergroup();
+    if !is_group_chat {
+        return;
+    }
+
+    match chat_history::is_recap_enabled(&ctx.db.pool, msg.chat.id.0).await {
+        Ok(false) => return,
+        Ok(true) => {}
+        Err(err) => {
+            warn!("failed to determine recap enablement: {err:?}");
+            return;
+        }
+    }
+
     let text = msg
         .text()
         .map(|s| s.to_string())
@@ -76,25 +90,45 @@ pub async fn record_message(ctx: Arc<AppContext>, msg: Message) {
     {
         warn!("record_message failed: {err:?}");
     }
+}
 
-    // For private chats with forwarded messages, also record to forwarded_histories
-    let is_private = matches!(msg.chat.kind, ChatKind::Private(_));
-    let is_forwarded = msg.forward().is_some();
-    if is_private && is_forwarded && text.is_some() {
-        if let Some(uid) = msg.from().map(|u| u.id.0 as i64) {
-            if let Err(err) = chat_history::insert_forwarded(
-                &ctx.db.pool,
-                uid,
-                None,
-                None,
-                MessageKind::Text,
-                text,
-                created_at,
-            )
-            .await
-            {
-                warn!("record_forwarded failed: {err:?}");
-            }
+/// Update an edited message in the database. Called from the router as a side effect.
+pub async fn record_edited_message(ctx: Arc<AppContext>, msg: Message) {
+    let is_group_chat = msg.chat.is_group() || msg.chat.is_supergroup();
+    if !is_group_chat {
+        return;
+    }
+
+    match chat_history::is_recap_enabled(&ctx.db.pool, msg.chat.id.0).await {
+        Ok(false) => return,
+        Ok(true) => {}
+        Err(err) => {
+            warn!("failed to determine recap enablement: {err:?}");
+            return;
+        }
+    }
+
+    let new_text = msg
+        .text()
+        .map(|s| s.to_string())
+        .or_else(|| msg.caption().map(|s| s.to_string()));
+
+    if let Some(text) = new_text {
+        debug!(
+            chat_id = msg.chat.id.0,
+            message_id = msg.id.0,
+            "updating edited message"
+        );
+
+        if let Err(err) = chat_history::update_message_text(
+            &ctx.db.pool,
+            msg.chat.id.0,
+            msg.id.0 as i64,
+            &text,
+        )
+        .await
+        {
+            warn!("record_edited_message failed: {err:?}");
         }
     }
 }

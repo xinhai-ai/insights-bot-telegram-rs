@@ -29,21 +29,10 @@ CREATE INDEX IF NOT EXISTS idx_chat_histories_chat_created ON chat_histories (ch
 CREATE TABLE IF NOT EXISTS recap_configs (
     chat_id INTEGER PRIMARY KEY,
     enabled INTEGER NOT NULL DEFAULT 1,
-    mode TEXT,
     auto_recap_enabled INTEGER NOT NULL DEFAULT 0,
-    auto_recap_rates_per_day INTEGER,
     last_recap_at INTEGER,
-    pinned_message_id INTEGER,
     updated_at INTEGER
 );
-
-CREATE TABLE IF NOT EXISTS recap_subscriptions (
-    id TEXT PRIMARY KEY,
-    chat_id INTEGER NOT NULL,
-    user_id INTEGER NOT NULL,
-    created_at INTEGER
-);
-CREATE INDEX IF NOT EXISTS idx_recap_subscriptions_chat ON recap_subscriptions (chat_id);
 
 CREATE TABLE IF NOT EXISTS recap_logs (
     id TEXT PRIMARY KEY,
@@ -53,18 +42,6 @@ CREATE TABLE IF NOT EXISTS recap_logs (
     model TEXT,
     prompt_tokens INTEGER,
     completion_tokens INTEGER,
-    feedback TEXT,
     created_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_recap_logs_chat_created ON recap_logs (chat_id, created_at);
-
-CREATE TABLE IF NOT EXISTS forwarded_histories (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    from_chat_id INTEGER,
-    message_id INTEGER,
-    kind TEXT NOT NULL,
-    text TEXT,
-    created_at INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_forwarded_histories_user_created ON forwarded_histories (user_id, created_at);

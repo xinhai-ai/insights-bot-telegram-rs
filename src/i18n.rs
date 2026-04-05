@@ -57,34 +57,33 @@ impl I18n {
         // but new embedded keys not present in external files are preserved).
         for &(code, _) in &embedded {
             let path = dir_path.join(format!("{code}.yml"));
-            if path.exists() {
-                if let Ok(raw) = fs::read_to_string(&path) {
-                    if let Ok(value) = serde_yaml::from_str::<Value>(&raw) {
-                        let mut external_flat = HashMap::new();
-                        flatten_yaml(None, &value, &mut external_flat);
+            if path.exists()
+                && let Ok(raw) = fs::read_to_string(&path)
+                && let Ok(value) = serde_yaml::from_str::<Value>(&raw)
+            {
+                let mut external_flat = HashMap::new();
+                flatten_yaml(None, &value, &mut external_flat);
 
-                        // Merge: external keys override embedded keys
-                        if let Some(base) = bundles.get_mut(code) {
-                            let external_count = external_flat.len();
-                            let base_count = base.len();
-                            for (k, v) in external_flat {
-                                base.insert(k, v);
-                            }
-                            let merged_count = base.len();
-                            let new_keys = merged_count.saturating_sub(external_count);
-                            if new_keys > 0 {
-                                info!(
-                                    "merged locale {code}: {} external keys + {} new embedded keys",
-                                    external_count, new_keys
-                                );
-                            } else {
-                                info!(
-                                    "merged locale {code} from {} ({} keys)",
-                                    path.display(),
-                                    base_count
-                                );
-                            }
-                        }
+                // Merge: external keys override embedded keys
+                if let Some(base) = bundles.get_mut(code) {
+                    let external_count = external_flat.len();
+                    let base_count = base.len();
+                    for (k, v) in external_flat {
+                        base.insert(k, v);
+                    }
+                    let merged_count = base.len();
+                    let new_keys = merged_count.saturating_sub(external_count);
+                    if new_keys > 0 {
+                        info!(
+                            "merged locale {code}: {} external keys + {} new embedded keys",
+                            external_count, new_keys
+                        );
+                    } else {
+                        info!(
+                            "merged locale {code} from {} ({} keys)",
+                            path.display(),
+                            base_count
+                        );
                     }
                 }
             }
