@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use anyhow::{Context, Result};
 use async_openai::{
     Client,
@@ -17,7 +15,7 @@ use crate::{
     i18n::I18n,
     services::prompts::{
         CHAT_HISTORY_SUMMARIZATION_SYSTEM_PROMPT, CHAT_HISTORY_SUMMARIZATION_USER_PROMPT,
-        PromptConfig, StructuredSummary, SummarizationMode, TopicSummary,
+        PromptConfig, StructuredSummary, TopicSummary,
     },
 };
 
@@ -47,90 +45,6 @@ impl OpenAiClient {
             token_limit: cfg.token_limit,
             prompt_config,
         })
-    }
-
-    /// Standard recap with bullet points (default mode).
-    #[allow(dead_code)]
-    pub async fn recap(&self, history: &[ChatHistory], i18n: &I18n) -> Result<String> {
-        self.recap_with_mode(history, SummarizationMode::BulletPoints, i18n)
-            .await
-    }
-
-    /// Recap with locale-aware prompts.
-    #[allow(dead_code)]
-    pub async fn recap_with_locale(
-        &self,
-        history: &[ChatHistory],
-        locale: &Locale,
-        i18n: &I18n,
-    ) -> Result<String> {
-        let formatted = format_messages(history);
-        self.recap_bullet_points_locale(&formatted, locale, i18n)
-            .await
-    }
-
-    /// Recap with specified summarization mode.
-    #[allow(dead_code)]
-    pub async fn recap_with_mode(
-        &self,
-        history: &[ChatHistory],
-        mode: SummarizationMode,
-        i18n: &I18n,
-    ) -> Result<String> {
-        let formatted = format_messages(history);
-
-        match mode {
-            SummarizationMode::BulletPoints => {
-                self.recap_bullet_points_locale(&formatted, &Locale::En, i18n)
-                    .await
-            }
-            SummarizationMode::SarcasticCondensed => self.sarcastic_condense(&formatted).await,
-            SummarizationMode::StructuredJson => {
-                let result = self.recap_structured(&formatted).await?;
-                // Convert structured result to readable text.
-                Ok(format_structured_summary(&result))
-            }
-        }
-    }
-
-    /// Standard bullet points recap with locale-aware system prompt.
-    async fn recap_bullet_points_locale(
-        &self,
-        content: &str,
-        locale: &Locale,
-        i18n: &I18n,
-    ) -> Result<String> {
-        // Use locale-specific system prompt from i18n.
-        let system_prompt = i18n.t(*locale, "prompts.bullet_system", &[]);
-
-        let req = CreateChatCompletionRequestArgs::default()
-            .model(&self.model)
-            .messages(vec![
-                ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
-                    content: system_prompt.into(),
-                    name: None,
-                }),
-                ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
-                    content: ChatCompletionRequestUserMessageContent::Text(content.to_string()),
-                    name: None,
-                }),
-            ])
-            .max_tokens(4096u32) // Output token limit (not context window)
-            .build()?;
-
-        let resp = self
-            .client
-            .chat()
-            .create(req)
-            .await
-            .context("openai chat completion failed")?;
-
-        let text = resp
-            .choices
-            .first()
-            .and_then(|c| c.message.content.clone())
-            .unwrap_or_else(|| "Recap unavailable.".to_string());
-        Ok(text)
     }
 
     /// Sarcastic condensed single-sentence summary with emoji.
@@ -172,45 +86,6 @@ impl OpenAiClient {
 
         tracing::debug!("sarcastic_condense raw response: {:?}", text);
         Ok(text.trim().to_string())
-    }
-
-    /// Structured JSON summarization with topics and discussion points.
-    pub async fn recap_structured(&self, content: &str) -> Result<StructuredSummary> {
-        let user_prompt = self.prompt_config.render_structured_user_prompt(content);
-
-        let req = CreateChatCompletionRequestArgs::default()
-            .model(&self.model)
-            .messages(vec![
-                ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
-                    content: CHAT_HISTORY_SUMMARIZATION_SYSTEM_PROMPT.into(),
-                    name: None,
-                }),
-                ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
-                    content: ChatCompletionRequestUserMessageContent::Text(user_prompt),
-                    name: None,
-                }),
-            ])
-            .max_tokens(self.token_limit.unwrap_or(2000))
-            .build()?;
-
-        let resp = self
-            .client
-            .chat()
-            .create(req)
-            .await
-            .context("structured summarization failed")?;
-
-        let raw_text = resp
-            .choices
-            .first()
-            .and_then(|c| c.message.content.clone())
-            .unwrap_or_else(|| "[]".to_string());
-
-        // Try to parse JSON, fallback to empty array on failure.
-        let summary: StructuredSummary =
-            serde_json::from_str(&raw_text).unwrap_or_else(|_| Vec::new());
-
-        Ok(summary)
     }
 
     /// Structured JSON summarization with locale-aware output language.
@@ -269,57 +144,6 @@ impl OpenAiClient {
         });
 
         Ok(summary)
-    }
-
-    /// Summarize any content (not chat history specific).
-    pub async fn summarize_any(&self, content: &str) -> Result<String> {
-        use crate::services::prompts::{
-            ANY_SUMMARIZATION_SYSTEM_PROMPT, ANY_SUMMARIZATION_USER_PROMPT,
-        };
-
-        let user_prompt = ANY_SUMMARIZATION_USER_PROMPT.replace("{{content}}", content);
-
-        let req = CreateChatCompletionRequestArgs::default()
-            .model(&self.model)
-            .messages(vec![
-                ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
-                    content: ANY_SUMMARIZATION_SYSTEM_PROMPT.into(),
-                    name: None,
-                }),
-                ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
-                    content: ChatCompletionRequestUserMessageContent::Text(user_prompt),
-                    name: None,
-                }),
-            ])
-            .max_tokens(300u32)
-            .build()?;
-
-        let resp = self
-            .client
-            .chat()
-            .create(req)
-            .await
-            .context("any summarization failed")?;
-
-        let text = resp
-            .choices
-            .first()
-            .and_then(|c| c.message.content.clone())
-            .unwrap_or_else(|| "Summary unavailable.".to_string());
-        Ok(text.trim().to_string())
-    }
-
-    // Placeholders for future media features.
-    pub async fn analyze_image(
-        &self,
-        _image_bytes: &[u8],
-        _user_prompt: Option<&str>,
-    ) -> Result<String> {
-        todo!("image analysis not implemented yet");
-    }
-
-    pub async fn transcribe_audio(&self, _audio_bytes: &[u8]) -> Result<String> {
-        todo!("audio transcription not implemented yet");
     }
 
     /// Generate both condensed and segmented summaries for chat history.
@@ -394,14 +218,6 @@ pub struct RecapOutput {
     pub created_at: i64,
 }
 
-#[derive(Debug, Clone)]
-pub struct RecapResult {
-    pub text: String,
-    pub model: String,
-    pub created_at: i64,
-    pub sarcastic_summary: Option<String>,
-}
-
 /// Format user name for display: prefer full_name, fallback to username if full_name is too long.
 fn format_user_name(full_name: &str, username: &str) -> String {
     // If full_name is >= 10 chars and username exists, use username
@@ -435,33 +251,6 @@ fn format_messages(history: &[ChatHistory]) -> String {
         ));
     }
     lines.join("\n")
-}
-
-/// Format structured summary into human-readable text.
-fn format_structured_summary(summary: &StructuredSummary) -> String {
-    if summary.is_empty() {
-        return "No topics identified.".to_string();
-    }
-
-    let mut output = Vec::new();
-    for (i, topic) in summary.iter().enumerate() {
-        output.push(format!("**{}. {}**", i + 1, topic.topic_name));
-        output.push(format!(
-            "   Participants: {}",
-            topic.participants.join(", ")
-        ));
-
-        for point in &topic.discussion {
-            output.push(format!("   • {}", point.point));
-        }
-
-        if let Some(conclusion) = &topic.conclusion {
-            output.push(format!("   Conclusion: {}", conclusion));
-        }
-        output.push(String::new());
-    }
-
-    output.join("\n")
 }
 
 /// Extract JSON from response that may be wrapped in markdown code block.

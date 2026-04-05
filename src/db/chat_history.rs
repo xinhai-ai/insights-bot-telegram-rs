@@ -34,6 +34,7 @@ pub async fn insert_message(
     Ok(())
 }
 
+#[allow(dead_code)] // Used by integration tests in tests/recap_scope_tests.rs
 pub async fn recent_messages(pool: &AnyPool, chat_id: i64, limit: i64) -> Result<Vec<ChatHistory>> {
     // Use explicit column selection with COALESCE to handle SQLx Any driver NULL issues.
     let rows = sqlx::query_as::<_, ChatHistory>(
@@ -90,20 +91,6 @@ pub async fn messages_since_hours(
     .fetch_all(pool)
     .await?;
     Ok(rows)
-}
-
-/// Count messages in a chat within the specified time duration.
-#[allow(dead_code)]
-pub async fn count_messages_since_hours(pool: &AnyPool, chat_id: i64, hours: i64) -> Result<i64> {
-    let since_timestamp = chrono::Utc::now().timestamp() - (hours * 3600);
-    let row: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM chat_histories WHERE chat_id = $1 AND created_at >= $2",
-    )
-    .bind(chat_id)
-    .bind(since_timestamp)
-    .fetch_one(pool)
-    .await?;
-    Ok(row.0)
 }
 
 /// Update the text of an existing message (for edited-message sync).

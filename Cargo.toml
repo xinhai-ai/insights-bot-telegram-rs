@@ -9,7 +9,6 @@ async-openai = { version = "0.28", default-features = false, features = ["rustls
 chrono = { version = "0.4", features = ["serde", "clock"] }
 dotenvy = "0.15"
 governor = { version = "0.6", features = ["dashmap"] }
-scraper = "0.19"
 axum = { version = "0.7", features = ["macros"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -33,10 +32,7 @@ url = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
 nonzero_ext = "0.3"
 reqwest = { version = "0.12.24", features = ["json"] }
-html-escape = "0.2"
-ammonia = "3"
 regex = "1"
-ego-tree = "0.6"
 
 [dev-dependencies]
 tempfile = "3"
