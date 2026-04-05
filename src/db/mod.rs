@@ -209,18 +209,17 @@ impl Database {
 
         let mut found_legacy_tables = Vec::new();
         for table in LEGACY_GO_TABLES {
-            let exists: bool = sqlx::query_scalar(
-                "SELECT EXISTS (
-                    SELECT 1
-                    FROM information_schema.tables
-                    WHERE table_schema = 'public' AND table_name = $1
-                )",
+            // Use COUNT instead of EXISTS to avoid Postgres Bool type
+            // which the sqlx Any driver does not support.
+            let count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM information_schema.tables
+                 WHERE table_schema = 'public' AND table_name = $1",
             )
             .bind(table)
             .fetch_one(pool)
             .await?;
 
-            if exists {
+            if count > 0 {
                 found_legacy_tables.push(*table);
             }
         }
