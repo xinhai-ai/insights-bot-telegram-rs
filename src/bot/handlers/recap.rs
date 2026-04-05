@@ -583,111 +583,9 @@ impl RecapHandlers {
             }
         };
 
-        let on_text = ctx.i18n.t(ctx.config.locale, "config.on", &[]);
-        let off_text = ctx.i18n.t(ctx.config.locale, "config.off", &[]);
-        let title = ctx.i18n.t(ctx.config.locale, "config.title", &[]);
-        let enabled_label = ctx.i18n.t(ctx.config.locale, "config.enabled", &[]);
-        let auto_recap_label = ctx.i18n.t(ctx.config.locale, "config.auto_recap", &[]);
-        let freq_title = ctx.i18n.t(ctx.config.locale, "config.freq_title", &[]);
-        let pin_label = ctx.i18n.t(ctx.config.locale, "config.pin", &[]);
-        let tap_to_adjust = ctx.i18n.t(ctx.config.locale, "config.tap_to_adjust", &[]);
-
-        let rates = cfg.auto_recap_rates_per_day;
-        let freq_display = format!("{}x", rates);
-        let pin_display = if cfg.pin_auto_recap_message {
-            &on_text
-        } else {
-            &off_text
-        };
-
-        let text = format!(
-            "🔈 {title}\n\n\
-             {enabled_label}: {enabled}\n\
-             {auto_recap_label}: {auto}\n\
-             {freq_title}: {freq_display}\n\
-             {pin_label}: {pin_display}\n\n\
-             {tap_to_adjust}",
-            enabled = if cfg.enabled { &on_text } else { &off_text },
-            auto = if cfg.auto_recap_enabled {
-                &on_text
-            } else {
-                &off_text
-            },
-        );
-
-        // Row 1: Enabled toggle
-        let (enable_on, enable_off) = if cfg.enabled {
-            (format!("🔘 {}", on_text), off_text.to_string())
-        } else {
-            (on_text.to_string(), format!("🔘 {}", off_text))
-        };
-
-        // Row 2: Auto-recap toggle
-        let (auto_on, auto_off) = if cfg.auto_recap_enabled {
-            (format!("🔘 {}", on_text), off_text.to_string())
-        } else {
-            (on_text.to_string(), format!("🔘 {}", off_text))
-        };
-
-        // Row 3: Frequency selection (2x, 3x, 4x)
-        let freq_2x = ctx.i18n.t(ctx.config.locale, "config.freq_2x", &[]);
-        let freq_3x = ctx.i18n.t(ctx.config.locale, "config.freq_3x", &[]);
-        let freq_4x = ctx.i18n.t(ctx.config.locale, "config.freq_4x", &[]);
-        let freq_2x_label = if rates == 2 {
-            format!("🔘 {}", freq_2x)
-        } else {
-            freq_2x
-        };
-        let freq_3x_label = if rates == 3 {
-            format!("🔘 {}", freq_3x)
-        } else {
-            freq_3x
-        };
-        let freq_4x_label = if rates == 4 {
-            format!("🔘 {}", freq_4x)
-        } else {
-            freq_4x
-        };
-
-        // Row 4: Pin toggle
-        let pin_on_label = ctx.i18n.t(ctx.config.locale, "config.pin_on", &[]);
-        let pin_off_label = ctx.i18n.t(ctx.config.locale, "config.pin_off", &[]);
-        let pin_on_text = if cfg.pin_auto_recap_message {
-            format!("🔘 {}", pin_on_label)
-        } else {
-            pin_on_label
-        };
-        let pin_off_text = if cfg.pin_auto_recap_message {
-            pin_off_label
-        } else {
-            format!("🔘 {}", pin_off_label)
-        };
-
-        let kb = InlineKeyboardMarkup::new(vec![
-            // Row 1: Enabled
-            vec![
-                InlineKeyboardButton::callback(enable_on, "cfg:enable:on"),
-                InlineKeyboardButton::callback(enable_off, "cfg:enable:off"),
-            ],
-            // Row 2: Auto-recap
-            vec![
-                InlineKeyboardButton::callback(auto_on, "cfg:auto:on"),
-                InlineKeyboardButton::callback(auto_off, "cfg:auto:off"),
-            ],
-            // Row 3: Frequency
-            vec![
-                InlineKeyboardButton::callback(freq_2x_label, "cfg:freq:2"),
-                InlineKeyboardButton::callback(freq_3x_label, "cfg:freq:3"),
-                InlineKeyboardButton::callback(freq_4x_label, "cfg:freq:4"),
-            ],
-            // Row 4: Pin
-            vec![
-                InlineKeyboardButton::callback(pin_on_text, "cfg:pin:on"),
-                InlineKeyboardButton::callback(pin_off_text, "cfg:pin:off"),
-            ],
-        ]);
-
-        bot.send_message(chat_id, text).reply_markup(kb).await?;
+        let header = ctx.i18n.t(ctx.config.locale, "config.header", &[]);
+        let kb = build_configure_keyboard(&cfg, &ctx.i18n, ctx.config.locale);
+        bot.send_message(chat_id, header).reply_markup(kb).await?;
         Ok(())
     }
 
@@ -702,9 +600,29 @@ impl RecapHandlers {
             return Ok(());
         };
         let chat_id = msg.chat.id;
+        let message_id = msg.id;
         let data = q.data.clone().unwrap_or_default();
         let parts: Vec<&str> = data.split(':').collect();
-        if parts.len() < 3 || parts[0] != "cfg" {
+        if parts.len() < 2 || parts[0] != "cfg" {
+            return Ok(());
+        }
+
+        // Section header — no-op
+        if parts[1] == "noop" {
+            return Ok(());
+        }
+
+        // Done — remove keyboard and show confirmation
+        if parts[1] == "done" {
+            let done_text = ctx.i18n.t(ctx.config.locale, "config.updated", &[]);
+            bot.edit_message_text(chat_id, message_id, done_text)
+                .await
+                .ok();
+            return Ok(());
+        }
+
+        // Setting change — need 3 parts: cfg:{setting}:{value}
+        if parts.len() < 3 {
             return Ok(());
         }
 
@@ -767,11 +685,19 @@ impl RecapHandlers {
                 .map_err(|e| error!("set pin failed: {e:?}"))
                 .ok();
             }
-            _ => {}
+            _ => return Ok(()),
         }
 
-        let updated_text = ctx.i18n.t(ctx.config.locale, "config.updated", &[]);
-        bot.send_message(chat_id, updated_text).await.ok();
+        // Reload config and refresh keyboard in-place
+        if let Ok(new_cfg) =
+            crate::db::recap_config::get_or_create_recap_config(&ctx.db.pool, chat_id.0).await
+        {
+            let kb = build_configure_keyboard(&new_cfg, &ctx.i18n, ctx.config.locale);
+            bot.edit_message_reply_markup(chat_id, message_id)
+                .reply_markup(kb)
+                .await
+                .ok();
+        }
         Ok(())
     }
 
@@ -793,4 +719,89 @@ impl RecapHandlers {
             Ok(())
         }
     }
+}
+
+/// Build the inline keyboard for /configure_recap in Go-style grouped layout.
+fn build_configure_keyboard(
+    cfg: &crate::db::models::RecapConfig,
+    i18n: &I18n,
+    locale: Locale,
+) -> InlineKeyboardMarkup {
+    let on = i18n.t(locale, "config.on", &[]);
+    let off = i18n.t(locale, "config.off", &[]);
+
+    let selected = |label: &str| format!("● {label}");
+
+    let (enable_on, enable_off) = if cfg.enabled {
+        (selected(&on), off.clone())
+    } else {
+        (on.clone(), selected(&off))
+    };
+
+    let (auto_on, auto_off) = if cfg.auto_recap_enabled {
+        (selected(&on), off.clone())
+    } else {
+        (on.clone(), selected(&off))
+    };
+
+    let rates = cfg.auto_recap_rates_per_day;
+    let freq_2x = i18n.t(locale, "config.freq_2x", &[]);
+    let freq_3x = i18n.t(locale, "config.freq_3x", &[]);
+    let freq_4x = i18n.t(locale, "config.freq_4x", &[]);
+    let f2 = if rates == 2 { selected(&freq_2x) } else { freq_2x };
+    let f3 = if rates == 3 { selected(&freq_3x) } else { freq_3x };
+    let f4 = if rates == 4 { selected(&freq_4x) } else { freq_4x };
+
+    let (pin_on, pin_off) = if cfg.pin_auto_recap_message {
+        (selected(&on), off)
+    } else {
+        (on, selected(&off))
+    };
+
+    let done = i18n.t(locale, "config.done", &[]);
+
+    InlineKeyboardMarkup::new(vec![
+        // Section: Enabled
+        vec![InlineKeyboardButton::callback(
+            i18n.t(locale, "config.section_enabled", &[]),
+            "cfg:noop",
+        )],
+        vec![
+            InlineKeyboardButton::callback(enable_on, "cfg:enable:on"),
+            InlineKeyboardButton::callback(enable_off, "cfg:enable:off"),
+        ],
+        // Section: Auto-recap
+        vec![InlineKeyboardButton::callback(
+            i18n.t(locale, "config.section_auto", &[]),
+            "cfg:noop",
+        )],
+        vec![
+            InlineKeyboardButton::callback(auto_on, "cfg:auto:on"),
+            InlineKeyboardButton::callback(auto_off, "cfg:auto:off"),
+        ],
+        // Section: Frequency
+        vec![InlineKeyboardButton::callback(
+            i18n.t(locale, "config.section_freq", &[]),
+            "cfg:noop",
+        )],
+        vec![
+            InlineKeyboardButton::callback(f2, "cfg:freq:2"),
+            InlineKeyboardButton::callback(f3, "cfg:freq:3"),
+            InlineKeyboardButton::callback(f4, "cfg:freq:4"),
+        ],
+        // Section: Pin
+        vec![InlineKeyboardButton::callback(
+            i18n.t(locale, "config.section_pin", &[]),
+            "cfg:noop",
+        )],
+        vec![
+            InlineKeyboardButton::callback(pin_on, "cfg:pin:on"),
+            InlineKeyboardButton::callback(pin_off, "cfg:pin:off"),
+        ],
+        // Done
+        vec![InlineKeyboardButton::callback(
+            format!("✅ {done}"),
+            "cfg:done",
+        )],
+    ])
 }
