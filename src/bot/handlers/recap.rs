@@ -602,43 +602,102 @@ impl RecapHandlers {
         let title = ctx.i18n.t(ctx.config.locale, "config.title", &[]);
         let enabled_label = ctx.i18n.t(ctx.config.locale, "config.enabled", &[]);
         let auto_recap_label = ctx.i18n.t(ctx.config.locale, "config.auto_recap", &[]);
+        let freq_title = ctx.i18n.t(ctx.config.locale, "config.freq_title", &[]);
+        let pin_label = ctx.i18n.t(ctx.config.locale, "config.pin", &[]);
         let tap_to_adjust = ctx.i18n.t(ctx.config.locale, "config.tap_to_adjust", &[]);
 
+        let rates = cfg.auto_recap_rates_per_day;
+        let freq_display = format!("{}x", rates);
+        let pin_display = if cfg.pin_auto_recap_message {
+            &on_text
+        } else {
+            &off_text
+        };
+
         let text = format!(
-            "🔈 {}\n\n{}: {}\n{}: {}\n\n{}",
-            title,
-            enabled_label,
-            if cfg.enabled { &on_text } else { &off_text },
-            auto_recap_label,
-            if cfg.auto_recap_enabled {
+            "🔈 {title}\n\n\
+             {enabled_label}: {enabled}\n\
+             {auto_recap_label}: {auto}\n\
+             {freq_title}: {freq_display}\n\
+             {pin_label}: {pin_display}\n\n\
+             {tap_to_adjust}",
+            enabled = if cfg.enabled { &on_text } else { &off_text },
+            auto = if cfg.auto_recap_enabled {
                 &on_text
             } else {
                 &off_text
             },
-            tap_to_adjust
         );
 
-        // Build keyboard with radio indicators.
+        // Row 1: Enabled toggle
         let (enable_on, enable_off) = if cfg.enabled {
             (format!("🔘 {}", on_text), off_text.to_string())
         } else {
             (on_text.to_string(), format!("🔘 {}", off_text))
         };
 
+        // Row 2: Auto-recap toggle
         let (auto_on, auto_off) = if cfg.auto_recap_enabled {
             (format!("🔘 {}", on_text), off_text.to_string())
         } else {
             (on_text.to_string(), format!("🔘 {}", off_text))
         };
 
+        // Row 3: Frequency selection (2x, 3x, 4x)
+        let freq_2x = ctx.i18n.t(ctx.config.locale, "config.freq_2x", &[]);
+        let freq_3x = ctx.i18n.t(ctx.config.locale, "config.freq_3x", &[]);
+        let freq_4x = ctx.i18n.t(ctx.config.locale, "config.freq_4x", &[]);
+        let freq_2x_label = if rates == 2 {
+            format!("🔘 {}", freq_2x)
+        } else {
+            freq_2x
+        };
+        let freq_3x_label = if rates == 3 {
+            format!("🔘 {}", freq_3x)
+        } else {
+            freq_3x
+        };
+        let freq_4x_label = if rates == 4 {
+            format!("🔘 {}", freq_4x)
+        } else {
+            freq_4x
+        };
+
+        // Row 4: Pin toggle
+        let pin_on_label = ctx.i18n.t(ctx.config.locale, "config.pin_on", &[]);
+        let pin_off_label = ctx.i18n.t(ctx.config.locale, "config.pin_off", &[]);
+        let pin_on_text = if cfg.pin_auto_recap_message {
+            format!("🔘 {}", pin_on_label)
+        } else {
+            pin_on_label
+        };
+        let pin_off_text = if cfg.pin_auto_recap_message {
+            pin_off_label
+        } else {
+            format!("🔘 {}", pin_off_label)
+        };
+
         let kb = InlineKeyboardMarkup::new(vec![
+            // Row 1: Enabled
             vec![
                 InlineKeyboardButton::callback(enable_on, "cfg:enable:on"),
                 InlineKeyboardButton::callback(enable_off, "cfg:enable:off"),
             ],
+            // Row 2: Auto-recap
             vec![
                 InlineKeyboardButton::callback(auto_on, "cfg:auto:on"),
                 InlineKeyboardButton::callback(auto_off, "cfg:auto:off"),
+            ],
+            // Row 3: Frequency
+            vec![
+                InlineKeyboardButton::callback(freq_2x_label, "cfg:freq:2"),
+                InlineKeyboardButton::callback(freq_3x_label, "cfg:freq:3"),
+                InlineKeyboardButton::callback(freq_4x_label, "cfg:freq:4"),
+            ],
+            // Row 4: Pin
+            vec![
+                InlineKeyboardButton::callback(pin_on_text, "cfg:pin:on"),
+                InlineKeyboardButton::callback(pin_off_text, "cfg:pin:off"),
             ],
         ]);
 
@@ -687,6 +746,40 @@ impl RecapHandlers {
                     .await
                     .map_err(|e| error!("set auto failed: {e:?}"))
                     .ok();
+            }
+            ("freq", rate_str) => {
+                if let Ok(rate) = rate_str.parse::<i32>()
+                    && [2, 3, 4].contains(&rate)
+                {
+                    crate::db::recap_config::set_auto_recap_rates_per_day(
+                        &ctx.db.pool,
+                        chat_id.0,
+                        rate,
+                    )
+                    .await
+                    .map_err(|e| error!("set freq failed: {e:?}"))
+                    .ok();
+                }
+            }
+            ("pin", "on") => {
+                crate::db::recap_config::set_pin_auto_recap_message(
+                    &ctx.db.pool,
+                    chat_id.0,
+                    true,
+                )
+                .await
+                .map_err(|e| error!("set pin failed: {e:?}"))
+                .ok();
+            }
+            ("pin", "off") => {
+                crate::db::recap_config::set_pin_auto_recap_message(
+                    &ctx.db.pool,
+                    chat_id.0,
+                    false,
+                )
+                .await
+                .map_err(|e| error!("set pin failed: {e:?}"))
+                .ok();
             }
             _ => {}
         }

@@ -8,6 +8,7 @@ use crate::config::DbConfig;
 pub mod chat_history;
 pub mod logs;
 pub mod models;
+pub mod migration;
 pub mod recap_config;
 
 #[derive(Debug, Clone, Copy)]
@@ -74,27 +75,44 @@ impl Database {
 
     /// Run database migrations based on the backend type.
     async fn run_migrations(&self) -> Result<()> {
-        let migration_sql = match self.backend {
-            DbBackend::Postgres => include_str!("../../migrations/postgres/0001_init.sql"),
-            DbBackend::Sqlite => include_str!("../../migrations/sqlite/0001_init.sql"),
+        let migration_files: Vec<&str> = match self.backend {
+            DbBackend::Postgres => vec![
+                include_str!("../../migrations/postgres/0001_init.sql"),
+                include_str!("../../migrations/postgres/0002_recap_config_extensions.sql"),
+            ],
+            DbBackend::Sqlite => vec![
+                include_str!("../../migrations/sqlite/0001_init.sql"),
+                include_str!("../../migrations/sqlite/0002_recap_config_extensions.sql"),
+            ],
         };
 
-        // Execute each statement separately (SQLite doesn't support multiple statements in one query)
-        for statement in migration_sql.split(';') {
-            // Strip leading comment lines (lines starting with --)
-            let stmt: String = statement
-                .lines()
-                .filter(|line| {
-                    let trimmed = line.trim();
-                    !trimmed.is_empty() && !trimmed.starts_with("--")
-                })
-                .collect::<Vec<_>>()
-                .join("\n");
-            let stmt = stmt.trim();
-            if stmt.is_empty() {
-                continue;
+        for migration_sql in migration_files {
+            // Execute each statement separately (SQLite doesn't support multiple statements in one query)
+            for statement in migration_sql.split(';') {
+                // Strip leading comment lines (lines starting with --)
+                let stmt: String = statement
+                    .lines()
+                    .filter(|line| {
+                        let trimmed = line.trim();
+                        !trimmed.is_empty() && !trimmed.starts_with("--")
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                let stmt = stmt.trim();
+                if stmt.is_empty() {
+                    continue;
+                }
+                // SQLite ALTER TABLE ADD COLUMN fails if column already exists;
+                // treat "duplicate column" as success for idempotency.
+                if let Err(err) = sqlx::query(stmt).execute(&self.pool).await {
+                    let msg = err.to_string();
+                    if msg.contains("duplicate column") || msg.contains("already exists") {
+                        debug!("migration statement skipped (already applied): {}", msg);
+                    } else {
+                        return Err(err.into());
+                    }
+                }
             }
-            sqlx::query(stmt).execute(&self.pool).await?;
         }
 
         info!("database migrations completed");

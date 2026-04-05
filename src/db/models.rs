@@ -64,6 +64,12 @@ pub struct RecapConfig {
     pub auto_recap_enabled: bool,
     pub last_recap_at: Option<i64>,
     pub updated_at: Option<i64>,
+    /// Auto-recap frequency: 2, 3, or 4 times per day.
+    pub auto_recap_rates_per_day: i32,
+    /// Whether to pin auto-recap messages in the group.
+    pub pin_auto_recap_message: bool,
+    /// Message ID of the last pinned recap (for unpin-before-pin).
+    pub last_pinned_message_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]

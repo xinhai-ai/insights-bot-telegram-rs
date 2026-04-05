@@ -43,6 +43,13 @@ config:
   auto_recap: "Auto recap"
   on: "On"
   off: "Off"
+  freq_title: "Frequency"
+  freq_2x: "2x/day"
+  freq_3x: "3x/day"
+  freq_4x: "4x/day"
+  pin: "Pin recap"
+  pin_on: "Pin On"
+  pin_off: "Pin Off"
   tap_to_adjust: "Tap buttons to adjust."
 
 # Telegraph related

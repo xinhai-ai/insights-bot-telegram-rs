@@ -43,6 +43,13 @@ config:
   auto_recap: "自动回顾"
   on: "开"
   off: "关"
+  freq_title: "频率"
+  freq_2x: "2次/天"
+  freq_3x: "3次/天"
+  freq_4x: "4次/天"
+  pin: "置顶回顾"
+  pin_on: "置顶 开"
+  pin_off: "置顶 关"
   tap_to_adjust: "点击按钮进行调整。"
 
 # Telegraph 相关
