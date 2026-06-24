@@ -599,16 +599,10 @@ fn chunked_history_notice(locale: &Locale) -> &'static str {
 fn append_chat_history_chunks(
     messages: &mut Vec<ChatCompletionRequestMessage>,
     chunks: &[String],
-    locale: Option<&Locale>,
+    _locale: Option<&Locale>,
 ) {
-    let total = chunks.len();
-    for (index, chunk) in chunks.iter().enumerate() {
-        let header = match locale {
-            Some(Locale::ZhHans) => format!("聊天记录分块 {}/{}：\n", index + 1, total),
-            Some(Locale::ZhHant) => format!("聊天記錄分塊 {}/{}：\n", index + 1, total),
-            _ => format!("Chat history block {}/{}:\n", index + 1, total),
-        };
-        messages.push(user_message(format!("{header}{chunk}")));
+    for chunk in chunks {
+        messages.push(user_message(chunk.clone()));
     }
 }
 
