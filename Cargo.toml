@@ -8,6 +8,7 @@ anyhow = "1"
 async-openai = { version = "0.28", default-features = false, features = ["rustls-webpki-roots"] }
 chrono = { version = "0.4", features = ["serde", "clock"] }
 dotenvy = "0.15"
+futures-util = "0.3"
 governor = { version = "0.6", features = ["dashmap"] }
 axum = { version = "0.7", features = ["macros"] }
 serde = { version = "1", features = ["derive"] }

@@ -11,8 +11,8 @@ pub enum Locale {
 
 impl Locale {
     pub fn from_env() -> Self {
-        match env::var("INSIGHTS_LANG")
-            .unwrap_or_else(|_| "en".to_string())
+        match env_nonempty("INSIGHTS_LANG")
+            .unwrap_or_else(|| "en".to_string())
             .as_str()
         {
             "zh-Hans" => Locale::ZhHans,
@@ -69,21 +69,20 @@ impl AppConfig {
         let locale = Locale::from_env();
 
         let telegram = TelegramConfig {
-            bot_token: env::var("TELEGRAM_BOT_TOKEN").context("TELEGRAM_BOT_TOKEN is required")?,
-            webhook_url: env::var("TELEGRAM_BOT_WEBHOOK_URL").ok(),
+            bot_token: env_nonempty("TELEGRAM_BOT_TOKEN")
+                .context("TELEGRAM_BOT_TOKEN is required")?,
+            webhook_url: env_nonempty("TELEGRAM_BOT_WEBHOOK_URL"),
             webhook_port: env::var("TELEGRAM_BOT_WEBHOOK_PORT")
                 .ok()
                 .and_then(|s| s.parse::<u16>().ok()),
         };
 
-        let postgres_url = env::var("DATABASE_URL")
-            .ok()
-            .or_else(|| env::var("DB_CONNECTION_STR").ok());
+        let postgres_url = env_nonempty("DATABASE_URL").or_else(|| env_nonempty("DB_CONNECTION_STR"));
 
         // Only use SQLite as fallback if:
         // 1. SQLITE_PATH is explicitly set, OR
         // 2. No PostgreSQL URL is configured (use SQLite as default)
-        let sqlite_file = env::var("SQLITE_PATH").ok().or_else(|| {
+        let sqlite_file = env_nonempty("SQLITE_PATH").or_else(|| {
             if postgres_url.is_none() {
                 Some("data/dev.db".into())
             } else {
@@ -96,20 +95,24 @@ impl AppConfig {
             sqlite_file,
         };
 
-        let api_base = env::var("OPENAI_API_HOST").ok().map(|url| {
-            // Normalize URL: remove trailing slash and ensure /v1 suffix
-            let url = url.trim_end_matches('/');
-            if url.ends_with("/v1") {
-                url.to_string()
-            } else {
-                format!("{url}/v1")
-            }
-        });
+        let api_base = env_nonempty("OPENAI_API_BASE_URL")
+            .or_else(|| env_nonempty("OPENAI_BASE_URL"))
+            .or_else(|| env_nonempty("OPENAI_API_HOST"))
+            .map(|url| {
+                // Normalize URL: remove trailing slash and ensure /v1 suffix
+                let url = url.trim_end_matches('/');
+                if url.ends_with("/v1") {
+                    url.to_string()
+                } else {
+                    format!("{url}/v1")
+                }
+            });
 
         let openai = OpenAiConfig {
-            api_key: env::var("OPENAI_API_KEY").context("OPENAI_API_KEY is required")?,
+            api_key: env_nonempty("OPENAI_API_KEY")
+                .context("OPENAI_API_KEY is required")?,
             api_base,
-            model: env::var("OPENAI_API_MODEL_NAME").unwrap_or_else(|_| "gpt-5".into()),
+            model: env_nonempty("OPENAI_API_MODEL_NAME").unwrap_or_else(|| "gpt-5".into()),
             token_limit: env::var("OPENAI_API_TOKEN_LIMIT")
                 .ok()
                 .and_then(|s| s.parse::<u32>().ok()),
@@ -118,9 +121,9 @@ impl AppConfig {
                 .and_then(|s| s.parse::<u32>().ok()),
         };
 
-        let log_level = env::var("LOG_LEVEL").unwrap_or_else(|_| "info".into());
-        let log_file_path = env::var("LOG_FILE_PATH").ok();
-        let locales_dir = env::var("LOCALES_DIR").unwrap_or_else(|_| "./locales".into());
+        let log_level = env_nonempty("LOG_LEVEL").unwrap_or_else(|| "info".into());
+        let log_file_path = env_nonempty("LOG_FILE_PATH");
+        let locales_dir = env_nonempty("LOCALES_DIR").unwrap_or_else(|| "./locales".into());
 
         Ok(Self {
             locale,
@@ -132,4 +135,8 @@ impl AppConfig {
             locales_dir,
         })
     }
+}
+
+fn env_nonempty(name: &str) -> Option<String> {
+    env::var(name).ok().filter(|value| !value.trim().is_empty())
 }

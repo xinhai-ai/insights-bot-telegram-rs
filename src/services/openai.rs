@@ -5,9 +5,10 @@ use async_openai::{
     types::{
         ChatCompletionRequestMessage, ChatCompletionRequestSystemMessage,
         ChatCompletionRequestUserMessage, ChatCompletionRequestUserMessageContent,
-        CreateChatCompletionRequestArgs,
+        CreateChatCompletionRequest, CreateChatCompletionRequestArgs,
     },
 };
+use futures_util::StreamExt;
 
 use crate::{
     config::{Locale, OpenAiConfig as OpenAiSettings},
@@ -20,6 +21,8 @@ use crate::{
         StructuredSummary, TopicSummary,
     },
 };
+
+const CHAT_MESSAGES_PER_USER_PROMPT: usize = 20;
 
 #[derive(Clone)]
 pub struct OpenAiClient {
@@ -41,9 +44,7 @@ impl OpenAiClient {
         let client = Client::with_config(builder);
         let prompt_config = PromptConfig::from_env();
         let sarcastic_model = std::env::var("SARCASTIC_CONDENSED_MODEL_NAME").ok();
-        let check_model = std::env::var("CHECK_MODEL")
-            .ok()
-            .filter(|s| !s.is_empty());
+        let check_model = std::env::var("CHECK_MODEL").ok().filter(|s| !s.is_empty());
         let check_model_backup = std::env::var("CHECK_MODEL_backup")
             .ok()
             .filter(|s| !s.is_empty());
@@ -59,42 +60,89 @@ impl OpenAiClient {
         })
     }
 
-    /// Sarcastic condensed single-sentence summary with emoji.
-    pub async fn sarcastic_condense(&self, content: &str) -> Result<String> {
-        let model = self.sarcastic_model.as_ref().unwrap_or(&self.model).clone();
+    async fn stream_chat_completion(
+        &self,
+        req: CreateChatCompletionRequest,
+        context: &'static str,
+    ) -> Result<String> {
+        let mut stream = self
+            .client
+            .chat()
+            .create_stream(req)
+            .await
+            .context(context)?;
+        let mut text = String::new();
 
-        let user_prompt = self.prompt_config.render_sarcastic_user_prompt(content);
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.context(context)?;
+            for choice in chunk.choices {
+                if let Some(content) = choice.delta.content {
+                    text.push_str(&content);
+                }
+            }
+        }
+
+        Ok(text)
+    }
+
+    /// Sarcastic condensed single-sentence summary with emoji.
+    pub async fn sarcastic_condense(
+        &self,
+        history: &[ChatHistory],
+        locale: &Locale,
+        i18n: &I18n,
+    ) -> Result<String> {
+        let model = self.sarcastic_model.as_ref().unwrap_or(&self.model).clone();
+        let history_chunks = format_message_chunks(history, CHAT_MESSAGES_PER_USER_PROMPT);
+        if history_chunks.is_empty() {
+            anyhow::bail!("no messages to summarize");
+        }
+        let history_notice = chunked_history_notice(locale);
+
+        let system_prompt = i18n
+            .t(*locale, "prompts.sarcastic_system", &[])
+            .replace("{{chat_history}}", history_notice)
+            .replace("{chat_history}", history_notice);
+        let user_prompt = i18n
+            .t(*locale, "prompts.sarcastic_user", &[])
+            .replace("{{chat_history}}", history_notice)
+            .replace("{chat_history}", history_notice);
+
+        let system_prompt = if system_prompt == "prompts.sarcastic_system" {
+            self.prompt_config
+                .render_sarcastic_system_prompt(history_notice)
+        } else {
+            system_prompt
+        };
+        let user_prompt = if user_prompt == "prompts.sarcastic_user" {
+            self.prompt_config
+                .render_sarcastic_user_prompt(history_notice)
+        } else {
+            user_prompt
+        };
+
+        let mut messages = vec![
+            ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
+                content: system_prompt.into(),
+                name: None,
+            }),
+            user_message(user_prompt),
+        ];
+        append_chat_history_chunks(&mut messages, &history_chunks, Some(locale));
 
         let req = CreateChatCompletionRequestArgs::default()
             .model(&model)
-            .messages(vec![
-                ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
-                    content: self.prompt_config.render_sarcastic_system_prompt(content).into(),
-                    name: None,
-                }),
-                ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
-                    content: ChatCompletionRequestUserMessageContent::Text(user_prompt),
-                    name: None,
-                }),
-            ])
-            .max_tokens(200u32) // Short response expected.
+            .messages(messages)
             .build()?;
 
-        let resp = self
-            .client
-            .chat()
-            .create(req)
-            .await
-            .context("sarcastic condense failed")?;
+        let text = self
+            .stream_chat_completion(req, "sarcastic condense failed")
+            .await?;
 
-        let text = resp
-            .choices
-            .first()
-            .and_then(|c| c.message.content.clone())
-            .unwrap_or_else(|| {
-                tracing::warn!("sarcastic_condense: no content in API response");
-                "Summary unavailable.".to_string()
-            });
+        if text.trim().is_empty() {
+            tracing::warn!("sarcastic_condense: no content in API response");
+            return Ok("Summary unavailable.".to_string());
+        }
 
         tracing::debug!("sarcastic_condense raw response: {:?}", text);
         Ok(text.trim().to_string())
@@ -104,9 +152,15 @@ impl OpenAiClient {
     /// Returns (parsed topics, raw JSON text) — raw text is kept for check model repair.
     pub async fn recap_structured_locale(
         &self,
-        content: &str,
+        history: &[ChatHistory],
         locale: &Locale,
     ) -> Result<(StructuredSummary, String)> {
+        let history_chunks = format_message_chunks(history, CHAT_MESSAGES_PER_USER_PROMPT);
+        if history_chunks.is_empty() {
+            anyhow::bail!("no messages to summarize");
+        }
+        let history_notice = chunked_history_notice(locale);
+
         let language = match locale {
             Locale::ZhHans => "Simplified Chinese",
             Locale::ZhHant => "Traditional Chinese",
@@ -115,35 +169,32 @@ impl OpenAiClient {
 
         let user_prompt = CHAT_HISTORY_SUMMARIZATION_USER_PROMPT
             .replace("{{language}}", language)
-            .replace("{{chat_history}}", content);
+            .replace("{{chat_history}}", history_notice)
+            .replace("{chat_history}", history_notice);
+
+        let mut messages = vec![
+            ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
+                content: CHAT_HISTORY_SUMMARIZATION_SYSTEM_PROMPT.into(),
+                name: None,
+            }),
+            user_message(user_prompt),
+        ];
+        append_chat_history_chunks(&mut messages, &history_chunks, None);
 
         let req = CreateChatCompletionRequestArgs::default()
             .model(&self.model)
-            .messages(vec![
-                ChatCompletionRequestMessage::System(ChatCompletionRequestSystemMessage {
-                    content: CHAT_HISTORY_SUMMARIZATION_SYSTEM_PROMPT.into(),
-                    name: None,
-                }),
-                ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
-                    content: ChatCompletionRequestUserMessageContent::Text(user_prompt),
-                    name: None,
-                }),
-            ])
+            .messages(messages)
             .max_tokens(self.token_limit.unwrap_or(8000))
             .build()?;
 
-        let resp = self
-            .client
-            .chat()
-            .create(req)
-            .await
-            .context("structured summarization failed")?;
-
-        let raw_text = resp
-            .choices
-            .first()
-            .and_then(|c| c.message.content.clone())
-            .unwrap_or_else(|| "[]".to_string());
+        let raw_text = self
+            .stream_chat_completion(req, "structured summarization failed")
+            .await?;
+        let raw_text = if raw_text.trim().is_empty() {
+            "[]".to_string()
+        } else {
+            raw_text
+        };
 
         tracing::debug!("recap_structured_locale raw response: {}", raw_text);
 
@@ -173,26 +224,20 @@ impl OpenAiClient {
                     content: system_prompt.into(),
                     name: None,
                 }),
-                ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
-                    content: ChatCompletionRequestUserMessageContent::Text(user_prompt.to_string()),
-                    name: None,
-                }),
+                user_message(user_prompt.to_string()),
             ])
             .max_tokens(2000u32)
             .build()?;
 
-        let resp = self
-            .client
-            .chat()
-            .create(req)
-            .await
-            .context("check model call failed")?;
+        let text = self
+            .stream_chat_completion(req, "check model call failed")
+            .await?;
 
-        resp.choices
-            .first()
-            .and_then(|c| c.message.content.clone())
-            .map(|t| t.trim().to_string())
-            .ok_or_else(|| anyhow::anyhow!("check model returned no content"))
+        let text = text.trim();
+        if text.is_empty() {
+            anyhow::bail!("check model returned no content");
+        }
+        Ok(text.to_string())
     }
 
     /// Attempt to repair malformed segmented JSON using check model (+ backup).
@@ -258,8 +303,7 @@ impl OpenAiClient {
         }
         trace.attempted = true;
 
-        let user_prompt =
-            CHECK_CONDENSED_OUTPUT_USER_PROMPT.replace("{{raw_output}}", raw_output);
+        let user_prompt = CHECK_CONDENSED_OUTPUT_USER_PROMPT.replace("{{raw_output}}", raw_output);
 
         // Try primary check model
         if let Ok(repaired) = self
@@ -280,11 +324,7 @@ impl OpenAiClient {
         if let Some(backup) = &self.check_model_backup {
             trace.backup_used = true;
             if let Ok(repaired) = self
-                .call_check_model(
-                    backup,
-                    CHECK_CONDENSED_OUTPUT_SYSTEM_PROMPT,
-                    &user_prompt,
-                )
+                .call_check_model(backup, CHECK_CONDENSED_OUTPUT_SYSTEM_PROMPT, &user_prompt)
                 .await
                 && !needs_condensed_repair(&repaired)
             {
@@ -308,8 +348,7 @@ impl OpenAiClient {
         chat_id: i64,
         i18n: &I18n,
     ) -> Result<RecapOutput> {
-        let formatted = format_messages(history);
-        if formatted.is_empty() {
+        if format_message_chunks(history, CHAT_MESSAGES_PER_USER_PROMPT).is_empty() {
             anyhow::bail!("no messages to summarize");
         }
 
@@ -331,8 +370,8 @@ impl OpenAiClient {
 
         // Generate both summaries concurrently
         let (condensed_result, segmented_result) = tokio::join!(
-            self.sarcastic_condense(&formatted),
-            self.recap_structured_locale(&formatted, locale)
+            self.sarcastic_condense(history, locale, i18n),
+            self.recap_structured_locale(history, locale)
         );
 
         // Process condensed result, optionally repair with check model
@@ -452,8 +491,16 @@ pub struct RecapTrace {
 impl RecapTrace {
     /// Build the three-line model status footer, joined by newline.
     pub fn build_status_lines(&self, locale: &Locale, i18n: &I18n) -> String {
-        let condensed_line = i18n.t(*locale, "footer.condensed", &[("model", &self.condensed_model)]);
-        let segmented_line = i18n.t(*locale, "footer.segmented", &[("model", &self.segmented_model)]);
+        let condensed_line = i18n.t(
+            *locale,
+            "footer.condensed",
+            &[("model", &self.condensed_model)],
+        );
+        let segmented_line = i18n.t(
+            *locale,
+            "footer.segmented",
+            &[("model", &self.segmented_model)],
+        );
         let check_line = self.format_check_line(locale, i18n);
         format!("{}\n{}\n{}", condensed_line, segmented_line, check_line)
     }
@@ -467,14 +514,20 @@ impl RecapTrace {
             return i18n.t(
                 *locale,
                 "footer.check_backup_success",
-                &[("model", &check.model), ("backup_model", &check.backup_model)],
+                &[
+                    ("model", &check.model),
+                    ("backup_model", &check.backup_model),
+                ],
             );
         }
         if check.attempted && check.failed && check.backup_used {
             return i18n.t(
                 *locale,
                 "footer.check_backup_failed",
-                &[("model", &check.model), ("backup_model", &check.backup_model)],
+                &[
+                    ("model", &check.model),
+                    ("backup_model", &check.backup_model),
+                ],
             );
         }
         if check.attempted && check.failed {
@@ -484,7 +537,11 @@ impl RecapTrace {
             return i18n.t(*locale, "footer.check_success", &[("model", &check.model)]);
         }
         // Not attempted = not triggered
-        i18n.t(*locale, "footer.check_not_triggered", &[("model", &check.model)])
+        i18n.t(
+            *locale,
+            "footer.check_not_triggered",
+            &[("model", &check.model)],
+        )
     }
 }
 
@@ -518,23 +575,72 @@ fn format_user_name(full_name: &str, username: &str) -> String {
     "unknown".to_string()
 }
 
-/// Format chat history messages for LLM input.
-/// Uses format: `msgId:{id}: {name} sent: {text}`
-fn format_messages(history: &[ChatHistory]) -> String {
-    let mut lines = Vec::new();
-    for h in history.iter() {
-        // Skip empty text messages
-        if h.text.is_empty() {
-            continue;
+fn user_message(content: String) -> ChatCompletionRequestMessage {
+    ChatCompletionRequestMessage::User(ChatCompletionRequestUserMessage {
+        content: ChatCompletionRequestUserMessageContent::Text(content),
+        name: None,
+    })
+}
+
+fn chunked_history_notice(locale: &Locale) -> &'static str {
+    match locale {
+        Locale::ZhHans => {
+            "聊天记录会在后续 user 消息中按顺序提供，每个消息块最多包含 20 条聊天消息。"
         }
-        let sender = format_user_name(&h.from_full_name, &h.from_username);
-        // Format: msgId:{id}: {name} sent: {text}
-        lines.push(format!(
-            "msgId:{}: {} sent: {}",
-            h.message_id, sender, h.text
-        ));
+        Locale::ZhHant => {
+            "聊天記錄會在後續 user 訊息中按順序提供，每個訊息區塊最多包含 20 條聊天訊息。"
+        }
+        Locale::En => {
+            "The chat history is provided in following user messages in chronological order, with up to 20 chat messages per block."
+        }
     }
-    lines.join("\n")
+}
+
+fn append_chat_history_chunks(
+    messages: &mut Vec<ChatCompletionRequestMessage>,
+    chunks: &[String],
+    locale: Option<&Locale>,
+) {
+    let total = chunks.len();
+    for (index, chunk) in chunks.iter().enumerate() {
+        let header = match locale {
+            Some(Locale::ZhHans) => format!("聊天记录分块 {}/{}：\n", index + 1, total),
+            Some(Locale::ZhHant) => format!("聊天記錄分塊 {}/{}：\n", index + 1, total),
+            _ => format!("Chat history block {}/{}:\n", index + 1, total),
+        };
+        messages.push(user_message(format!("{header}{chunk}")));
+    }
+}
+
+fn format_message_line(h: &ChatHistory) -> Option<String> {
+    if h.text.is_empty() {
+        return None;
+    }
+    let sender = format_user_name(&h.from_full_name, &h.from_username);
+    Some(format!(
+        "msgId:{}: {} sent: {}",
+        h.message_id, sender, h.text
+    ))
+}
+
+fn format_message_chunks(history: &[ChatHistory], chunk_size: usize) -> Vec<String> {
+    let chunk_size = chunk_size.max(1);
+    let mut chunks = Vec::new();
+    let mut current = Vec::with_capacity(chunk_size);
+
+    for line in history.iter().filter_map(format_message_line) {
+        current.push(line);
+        if current.len() == chunk_size {
+            chunks.push(current.join("\n"));
+            current.clear();
+        }
+    }
+
+    if !current.is_empty() {
+        chunks.push(current.join("\n"));
+    }
+
+    chunks
 }
 
 /// Extract JSON from response that may be wrapped in markdown code block.
@@ -595,7 +701,9 @@ pub fn format_topics_to_telegram_html(
         if topic.since_id > 0 {
             output.push(format!(
                 "<b><a href=\"https://t.me/c/{}/{}\">{}</a></b>",
-                chat_cid, topic.since_id, escape_html(&topic.topic_name)
+                chat_cid,
+                topic.since_id,
+                escape_html(&topic.topic_name)
             ));
         } else {
             output.push(format!("<b>{}</b>", escape_html(&topic.topic_name)));
@@ -608,7 +716,10 @@ pub fn format_topics_to_telegram_html(
             .map(|p| escape_html(p))
             .collect::<Vec<_>>()
             .join(&comma);
-        output.push(format!("{}{}{}", participants_label, colon, participants_str));
+        output.push(format!(
+            "{}{}{}",
+            participants_label, colon, participants_str
+        ));
 
         // Discussion
         output.push(format!("{}{}", discussion_label, colon));
@@ -621,7 +732,9 @@ pub fn format_topics_to_telegram_html(
                 .map(|(i, id)| {
                     format!(
                         "<a href=\"https://t.me/c/{}/{}\">[{}]</a>",
-                        chat_cid, id, i + 1
+                        chat_cid,
+                        id,
+                        i + 1
                     )
                 })
                 .collect();
@@ -737,4 +850,56 @@ pub fn format_topics_to_markdown(
     }
 
     output.join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn chat_history(message_id: i64, text: &str) -> ChatHistory {
+        ChatHistory {
+            id: message_id,
+            chat_id: 1,
+            message_id,
+            from_id: 100,
+            from_full_name: "Alice Example".to_string(),
+            from_username: "alice".to_string(),
+            kind: "text".to_string(),
+            text: text.to_string(),
+            media_url: String::new(),
+            created_at: message_id,
+        }
+    }
+
+    #[test]
+    fn format_message_chunks_groups_twenty_text_messages() {
+        let history = (1..=41)
+            .map(|id| chat_history(id, &format!("message {id}")))
+            .collect::<Vec<_>>();
+
+        let chunks = format_message_chunks(&history, CHAT_MESSAGES_PER_USER_PROMPT);
+
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks[0].lines().count(), 20);
+        assert_eq!(chunks[1].lines().count(), 20);
+        assert_eq!(chunks[2].lines().count(), 1);
+        assert!(chunks[0].contains("msgId:1: alice sent: message 1"));
+        assert!(chunks[2].contains("msgId:41: alice sent: message 41"));
+    }
+
+    #[test]
+    fn format_message_chunks_skips_empty_text_messages() {
+        let history = vec![
+            chat_history(1, "first"),
+            chat_history(2, ""),
+            chat_history(3, "third"),
+        ];
+
+        let chunks = format_message_chunks(&history, 20);
+
+        assert_eq!(
+            chunks,
+            vec!["msgId:1: alice sent: first\nmsgId:3: alice sent: third"]
+        );
+    }
 }

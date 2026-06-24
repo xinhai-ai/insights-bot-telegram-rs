@@ -1,0 +1,29 @@
+services:
+  insights-bot:
+    build:
+      context: .
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL
+      - TELEGRAM_BOT_TOKEN
+      - OPENAI_API_KEY
+      - OPENAI_API_BASE_URL
+      - OPENAI_BASE_URL
+      - OPENAI_API_HOST
+      - OPENAI_API_MODEL_NAME=${OPENAI_API_MODEL_NAME:-gpt-5}
+      - INSIGHTS_LANG=${INSIGHTS_LANG:-zh-Hans}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - LOCALES_DIR=/app/locales
+    networks:
+      - 1panel-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/health | grep -q '^ok$'"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+networks:
+  1panel-network:
+    external: true
+    name: 1panel-network

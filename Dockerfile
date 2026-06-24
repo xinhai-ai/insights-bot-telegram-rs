@@ -1,5 +1,7 @@
 # Build stage
-FROM rust:1.85-alpine AS builder
+FROM rust:1.96-alpine AS builder
+
+ENV PATH="/usr/local/cargo/bin:${PATH}"
 
 # Install build dependencies
 RUN apk add --no-cache musl-dev openssl-dev openssl-libs-static pkgconfig
@@ -22,7 +24,7 @@ COPY locales ./locales
 RUN touch src/main.rs && cargo build --release
 
 # Runtime stage
-FROM alpine:3.20
+FROM alpine:3.23
 
 # Install runtime dependencies
 RUN apk add --no-cache ca-certificates tzdata

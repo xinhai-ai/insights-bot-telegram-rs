@@ -22,7 +22,7 @@ Telegram-only rewrite of the recap bot inspired by the original Go implementatio
 1. Copy `.env` from project template and set:
    - `TELEGRAM_BOT_TOKEN`
    - `DATABASE_URL` (Postgres) or `SQLITE_PATH` (fallback)
-   - `OPENAI_API_SECRET` (or `OPENAI_API_KEY`)
+   - `OPENAI_API_KEY`
    - `INSIGHTS_LANG` (`en` / `zh-Hans` / `zh-Hant`)
    - `LOCALES_DIR` (defaults `./locales`)
 2. Run:
@@ -31,6 +31,35 @@ Telegram-only rewrite of the recap bot inspired by the original Go implementatio
    cargo check
    ```
 3. (Optional) create DB schema via `sqlx` migrations (not included yet).
+
+## Docker
+This repo ships with `docker-compose.yml` for container deployment on the external `1panel-network`.
+
+Create a `.env` file in the repo root or set the same values in 1Panel:
+- `TELEGRAM_BOT_TOKEN`
+- `OPENAI_API_KEY`
+- `DATABASE_URL`
+- `OPENAI_API_BASE_URL` or `OPENAI_BASE_URL` or `OPENAI_API_HOST`
+
+Recommended `DATABASE_URL` format:
+`postgresql://<user>:<password>@psql:5432/<database>`
+
+Optional defaults:
+- `OPENAI_API_MODEL_NAME=gpt-5`
+- `INSIGHTS_LANG=zh-Hans`
+- `LOG_LEVEL=info`
+
+Start:
+```bash
+docker compose up -d --build
+```
+
+Health check:
+```bash
+curl http://127.0.0.1:3000/health
+```
+
+The container must join `1panel-network`, and the PostgreSQL service must be reachable as `psql` on that network.
 
 ## Database behavior
 - Attempts Postgres first; on failure logs warning and connects to SQLite (`sqlite://{SQLITE_PATH}`).
