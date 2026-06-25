@@ -63,6 +63,7 @@ telegraph:
 
 # Model status footer lines
 footer:
+  message_count: "🧮 {count} text messages included in this recap"
   condensed: "🤖️ Condensed by {model}"
   segmented: "🤖️ Segmented by {model}"
   check_not_configured: "🤖️ Check model not configured"

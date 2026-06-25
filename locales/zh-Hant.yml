@@ -63,6 +63,7 @@ telegraph:
 
 # 模型狀態頁腳
 footer:
+  message_count: "🧮 統計範圍內共 {count} 條文字訊息"
   condensed: "🤖️ 由 {model} 生成 濃縮總結"
   segmented: "🤖️ 由 {model} 生成 分段總結"
   check_not_configured: "🤖️ 未配置校驗模型"

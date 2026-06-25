@@ -366,6 +366,7 @@ impl OpenAiClient {
                 backup_model: self.check_model_backup.clone().unwrap_or_default(),
                 ..Default::default()
             },
+            message_count: history.iter().filter(|h| !h.text.is_empty()).count(),
         };
 
         // Generate both summaries concurrently
@@ -486,11 +487,14 @@ pub struct RecapTrace {
     pub condensed_model: String,
     pub segmented_model: String,
     pub check: CheckModelTrace,
+    pub message_count: usize,
 }
 
 impl RecapTrace {
-    /// Build the three-line model status footer, joined by newline.
+    /// Build the recap footer, joined by newline.
     pub fn build_status_lines(&self, locale: &Locale, i18n: &I18n) -> String {
+        let message_count = self.message_count.to_string();
+        let messages_line = i18n.t(*locale, "footer.message_count", &[("count", &message_count)]);
         let condensed_line = i18n.t(
             *locale,
             "footer.condensed",
@@ -502,7 +506,10 @@ impl RecapTrace {
             &[("model", &self.segmented_model)],
         );
         let check_line = self.format_check_line(locale, i18n);
-        format!("{}\n{}\n{}", condensed_line, segmented_line, check_line)
+        format!(
+            "{}\n{}\n{}\n{}",
+            messages_line, condensed_line, segmented_line, check_line
+        )
     }
 
     fn format_check_line(&self, locale: &Locale, i18n: &I18n) -> String {
